@@ -628,7 +628,7 @@ class Agent:
           两个图形 的相等判断 允许 存在 一点误差,
            由于 delta_AB.any() 的 判断 , 只要有一个像素 不等, 都被认为不等
            例如 B-08 中的 A, C 两个图形, 有稍小的 偏差
-            ( ? 可以考虑 偏移较少像素 后 再判断 相关 ??? )
+            ( ? 可以考虑 偏移较少像素 后 再判断 相等 ??? )
         """
         diffRadioAB = countDiffRadio(self.images["A"], self.images["B"]) 
         if  diffRadioAB<SAMEIMG_THRESHOLD :
@@ -733,5 +733,5 @@ class Agent:
   (1) 两个图片是否相等的比较, 原来 delta_AC.any() 的方式, 求解 B-08 时, 发现A,C 有稍稍的误差, 这个代码里使用 countDiffRadio 比较, 阈值 SAMEIMG_THRESHOLD ( 代码 628 行附近 )
   (2) 反转图片的比较 , 原来两种方式, 改成了 四中情况, 具体参考 代码 455行附近 方法 try_solve_2x2_byFlip 
   (3) 增加了 从非实心图 变为 实心图 ( 如 B-09 ),具体参考 代码 500行附近 方法 try_solve_2x2_byFilled
-  (3) 增加了按 图像元素 增减 规律 求解的 方法, 具体参考 代码 555 行附近 方法 try_solve_2x2_byImgElementChange
+  (4) 增加了按 图像元素 增减 规律 求解的 方法, 具体参考 代码 555 行附近 方法 try_solve_2x2_byImgElementChange
 """
