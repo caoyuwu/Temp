@@ -64,4 +64,20 @@ class CV2Utils:
                 line = line+CV2Utils.getPixChar(pixArray)[0]
             print(line)                
                 
+    #
+    # PIL 生成的 图形, width X height
+    #
+    def printImage1(image):
+        width,height = image.shape
+        for y0 in range(0,height,8):
+            line = ""
+            for x0 in range(0,width,8):
+                pixArray = [0,0,0,0,0,0,0,0]
+                for yi in range(8):
+                    for xi in range(8):
+                        if (y0+yi<height) and (x0+xi<width) and image[x0+xi,y0+yi]==0:
+                            pixArray[yi] |= 1<<(7-xi)
+                line = line+CV2Utils.getPixChar(pixArray)[0]
+            print(line)                        
+                
             
