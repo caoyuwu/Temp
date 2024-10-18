@@ -351,7 +351,6 @@ def testAgentSolveChallenge(problemId):
 
     
 def main():
-    Agent.DB_LEVEL = "DEBUG"
     Agent._DEBUG = True
     #tempTest()
     #return
@@ -421,8 +420,8 @@ def main():
     #testAgentSolve("B-10")
     
     #testAgentSolve("C-01")
-    testAgentSolve("C-02")  # 两组图形6个全相同, 只是 比例 不同
-    #testAgentSolve("C-03") #[ABC-GH4]两组图形元素个数变化按同倍数递增
+    #testAgentSolve("C-02")  # 两组图形6个全相同, 只是 比例 不同
+    testAgentSolve("C-03") #[ABC-GH4]两组图形元素个数变化按同倍数递增
     #testAgentSolve("D-02")  # [ABC-GH1]两组图形具有相同组合
     #testAgentSolve("D-04")
     #testAgentSolve("D-11") #[BFG-AE3]每组图形全相等

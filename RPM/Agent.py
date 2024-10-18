@@ -1444,6 +1444,14 @@ class Agent:
             pass # todo                
     # END method calculateImages3MatchScore 
 
+    def _printAnswerScoreDetails(answerScore:AnswerScore)->None:
+        if len(answerScore.scoreDetails)==0:
+            print("答案 [%d] 总得分 = %.2f " % (answerScore.answer,answerScore.score))
+        else:
+            print("答案 [%d] 总得分 = %.2f , 其中 " % (answerScore.answer,answerScore.score))
+            for scoreDetail in answerScore.scoreDetails:
+                print("  得分 %.2f 来自于: [%s-%s]%s" % scoreDetail)
+        
 ################################################################
 # solve_2x2
 #############################################################
@@ -1455,9 +1463,7 @@ class Agent:
             self.calculateImages2MatchScore("AC","B"+answer,answerScore)
             #  self.calculateImages2MatchScore("BC","A"+answer,answerScore,0.5) # 对角线 ????
             if Agent._DEBUG:
-                print("答案 [%d] 总得分 = %.2f , 其中:" % (answerScore.answer,answerScore.score))
-                for scoreDetail in answerScore.scoreDetails:
-                    print("  得分 %.2f 来自于: [%s-%s]%s" % scoreDetail)
+                Agent._printAnswerScoreDetails(answerScore)
             answers.append(answerScore)
         answers = AnswerScore.getMaxScoreAnswers(answers)
         return answers[0].answer
@@ -1495,9 +1501,7 @@ class Agent:
             self.calculateImages3MatchScore("CDH","AE"+answer,answerScore,0.7)  # 对角线
             # score += self.calculateImages2MatchScore("BC","A"+answer,0.5)
             if Agent._DEBUG:
-                print("答案 [%d] 总得分 = %.2f , 其中:" % (answerScore.answer,answerScore.score))
-                for scoreDetail in answerScore.scoreDetails:
-                    print("  得分 %.2f 来自于: [%s-%s]%s" % scoreDetail)
+                Agent._printAnswerScoreDetails(answerScore)
             answers.append(answerScore)
         answers = AnswerScore.getMaxScoreAnswers(answers)
         return answers[0].answer
