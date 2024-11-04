@@ -663,7 +663,7 @@ class ImageElement:
     def  mergImgElements() ->list:
         pass
     
-    def getSumImgElementsBlackPonts(imgElements:list)->int:
+    def getSumImgElementsBlackPoints(imgElements:list)->int:
         n = 0
         for e in imgElements:
             n += e.blackPixelCount
@@ -789,7 +789,7 @@ class ImageElementTrans:
     def __init__(self,transMode,matched:bool,similar:float,scale):
         #self.elementIdx = elementIdx
         self.transMode = transMode  # IMGTRANSMODE_EQ 等
-        self.matched = matched # similar > 给定的阈值, 即 表名 两个元素 满足 transMode 的变换规则
+        self.matched = matched # similar > 给定的阈值, 即 表名 两个元素 满足 transMode 的变换规则 ; similar>=0.90
         self.similar = similar
         self.scale = scale
             
@@ -826,10 +826,18 @@ class Images2:
         return  len(self.transElements)
     
     #
-    # img1 -> img1 : 元素 增加 个数
+    # img1 -> img2 : 元素 增加 个数
     #
     def getImgElementsCountDiff(self):
         return  len(self.img2Elements) - len(self.img1Elements)
+    
+    #
+    #  img1 / img2 的 相像素 比例
+    #
+    def getBlackRatio(self):
+        n1 = ImageElement.getSumImgElementsBlackPoints(self.img1Elements)
+        n2 = ImageElement.getSumImgElementsBlackPoints(self.img2Elements)
+        return  n1 if n2==0 else n1/n2
    
     def getAllImgElementTrans(self,elementIdx:int,transModeLst:list)->list:
         trans = []
@@ -1010,7 +1018,7 @@ class Images2:
     #
     # 判断 从 startElementIdx - endElementIdx 的元素 相同 或 相似
     #
-    def isImgElementsEquals(self,startElementIdx=0,endElementIdx=0):
+    def isImgElementsEqualsOrSimilar(self,startElementIdx=0,endElementIdx=0):
         if endElementIdx==0:
             endElementIdx = len(self.transElements)
         for elementIdx in range(startElementIdx,endElementIdx):
@@ -1018,6 +1026,16 @@ class Images2:
             if not transInfo.matched:
                 return False
         return True    
+    
+    def isImgElementsEquals(self,startElementIdx=0,endElementIdx=0):
+        if endElementIdx==0:
+            endElementIdx = len(self.transElements)
+        for elementIdx in range(startElementIdx,endElementIdx):
+            transInfo = self.getImgElementTrans(elementIdx,IMGTRANSMODE_EQ)
+            if not transInfo.matched or abs(transInfo.scale-1)>0.05 :
+                return False
+        return True    
+
 
 
 # End class Images2
@@ -1069,7 +1087,7 @@ class Images3:
         otherimgElements = self.agent.getImageElements(otherImgId) 
         nElements = len(otherimgElements)
         for i in range(3):
-            if indexOf(excludeIdxs,i)<0 and len(self.imgsElementsLst[i])==nElements and self.agent.getImages2(self.name[i:i+1]+otherImgId).isImgElementsEquals():
+            if indexOf(excludeIdxs,i)<0 and len(self.imgsElementsLst[i])==nElements and self.agent.getImages2(self.name[i:i+1]+otherImgId).isImgElementsEqualsOrSimilar():
                 return i
         return -1
  
@@ -1079,11 +1097,11 @@ class Images3:
     #         0 : 图1 == 图2 == 图3
     #
     def compareImgPixelCount(self):
-        img1BlackPoints = ImageElement.getSumImgElementsBlackPonts(self.img1Elements)
-        img2BlackPoints = ImageElement.getSumImgElementsBlackPonts(self.img2Elements)
-        img3BlackPoints = ImageElement.getSumImgElementsBlackPonts(self.img3Elements)
+        img1BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img1Elements)
+        img2BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img2Elements)
+        img3BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img3Elements)
         return _compare3(img1BlackPoints,img2BlackPoints,img3BlackPoints)
-        
+    
     
     def compareImgPixelHeight(self)->bool:
         h1 = ImageElement.getImgElementsHeight(self.img1Elements)
@@ -1097,7 +1115,17 @@ class Images3:
         w3 = ImageElement.getImgElementsWidth(self.img3Elements)
         return _compare3(w1,w2,w3)
     
-
+    #
+    # 返回 A/B, B/C , A/C 的像素比例
+    #
+    def getImagePixelRatio(self)->list[float]:
+        img1BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img1Elements)
+        img2BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img2Elements)
+        img3BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img3Elements)
+        return [img1BlackPoints if img2BlackPoints==0 else img1BlackPoints/img2BlackPoints, \
+                img2BlackPoints if img3BlackPoints==0 else img2BlackPoints/img3BlackPoints, \
+                img1BlackPoints if img3BlackPoints==0 else img1BlackPoints/img3BlackPoints \
+                ]
  
 # END class Images3   
      
@@ -1147,7 +1175,7 @@ class Agent:
     # @param imageId image id,  如 "A", "B", "C", "1", "2" 等
     # @return 返回 数组: [元素1,元素2,...]
     #
-    def  getImageElements(self,imageId:str) ->list:
+    def  getImageElements(self,imageId:str) ->list[ImageElement]:
         imgElemets = self.imagesEles.get(imageId)
         if imgElemets!=None :
             return imgElemets
@@ -1238,7 +1266,7 @@ class Agent:
                 elif transInfo.transMode==IMGTRANSMODE_EQ:
                     # 正方形, 圆形 等对称图形, 如果 同时 基于整图翻转 , 加分
                     if (imgsFrm1.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPV) and  imgsFrm2.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPV))\
-                    or (imgsFrm1.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPV) and  imgsFrm2.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPV)):
+                    or (imgsFrm1.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPH) and  imgsFrm2.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPH)):
                         # B-05
                         score += 3 
                         desc2 += "(基于整图翻转)"
@@ -1256,11 +1284,11 @@ class Agent:
                 # 再检查, 是否 变动的 元素 相同:
                 if elementCountDiff1>0:   # A->B , C->? 图形元素增加
                     imgFrameBD = self.getImages2(imgs1Name[1:2]+imgs2Name[1:2])  # Frame  B?
-                    if imgFrameBD.isImgElementsEquals(len(imgsFrm1.img1Elements)) : # C 与 答案 新加的元素 相同 
+                    if imgFrameBD.isImgElementsEqualsOrSimilar(len(imgsFrm1.img1Elements)) : # C 与 答案 新加的元素 相同 
                         scoreAddTo.addScore(7* scoreWeight,imgs1Name,imgs2Name,"两组增加了相同类型的元素");     
                 elif elementCountDiff2<0: # C-? 图形元素减少
                     imgFrameAC = self.getImages2(imgs1Name[0:1]+imgs2Name[0:1])  # Frame  AC 
-                    if imgFrameAC.isImgElementsEquals(len(imgsFrm1.img2Elements)) : # C 与 答案 的元素 相同 
+                    if imgFrameAC.isImgElementsEqualsOrSimilar(len(imgsFrm1.img2Elements)) : # C 与 答案 的元素 相同 
                         scoreAddTo.addScore(7* scoreWeight,imgs1Name,imgs2Name,"两组减少了相同类型的元素")
             else:
                 scoreAddTo.addScore(1* scoreWeight,imgs1Name,imgs2Name,"两组元素增减个数相同")
@@ -1273,7 +1301,7 @@ class Agent:
     # @param imgs1Name,imgs2Name:  一行 或 一列 或 对角线 的 三个图 ,如 "ABC","ADG", "GH1" ,"CF1" 等
     # @param scoreAddTo 得分结果 累加到 scoreAddTo 中
     #
-    def calculateImages3MatchScore(self,imgs1Name,imgs2Name,scoreAddTo:AnswerScore,scoreWeight=1):
+    def calculateImages3MatchScore(self,imgs1Name:str,imgs2Name:str,scoreAddTo:AnswerScore,scoreWeight=1):
         imgsFrm1 = self.getImages3(imgs1Name)
         imgsFrm2 = self.getImages3(imgs2Name)
         #A,B,C = imgsFrm1.imgId1,imgsFrm1.imgId2,imgsFrm1.imgId3
@@ -1305,17 +1333,23 @@ class Agent:
             #scoreAddTo.addScore(10 * scoreWeight ,imgs1Name,imgs2Name,"两组图形具有相同组合")
             caseAddOrSubEq = False
             caseXorEq = False
-            if self.getImages2(imgs2Name[0:2]).isImgElementsEquals() and self.getImages2(imgs2Name[1:3]).isImgElementsEquals():
+            if self.getImages2(imgs2Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs2Name[1:3]).isImgElementsEqualsOrSimilar():
                 # GH? 图形相同, ABC 也相同 ( 因为 同组合 )
-                score += 10
-                desc = "两组图形6个全相同"
+                if self.getImages2(imgs2Name[0:2]).isImgElementsEquals() and self.getImages2(imgs2Name[1:3]).isImgElementsEquals():
+                    score += 12
+                    desc = "两组图形6个全相同"  
+                else:                    
+                    score += 10
+                    desc = "两组图形6个全相似"  
                 #scoreAddTo.addScore(10 * scoreWeight ,imgs1Name,imgs2Name,"两组图形6个全相同")
                 all6ImgEquals = True
             scoreAddTo.addScore(score * scoreWeight ,imgs1Name,imgs2Name,desc) # C-02
-        elif    self.getImages2(imgs1Name[0:2]).isImgElementsEquals() and self.getImages2(imgs1Name[1:3]).isImgElementsEquals() \
-            and self.getImages2(imgs2Name[0:2]).isImgElementsEquals() and self.getImages2(imgs2Name[1:3]).isImgElementsEquals():
+        elif    self.getImages2(imgs1Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs1Name[1:3]).isImgElementsEqualsOrSimilar() \
+            and self.getImages2(imgs2Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs2Name[1:3]).isImgElementsEqualsOrSimilar():
+            eq =  self.getImages2(imgs1Name[0:2]).isImgElementsEquals() and self.getImages2(imgs1Name[1:3]).isImgElementsEquals() \
+                and self.getImages2(imgs2Name[0:2]).isImgElementsEquals() and self.getImages2(imgs2Name[1:3]).isImgElementsEquals()
             # ABC 相等, GHI 相等
-            scoreAddTo.addScore(10 * scoreWeight ,imgs1Name,imgs2Name,"每组图形全相等")
+            scoreAddTo.addScore((12 if eq else 10) * scoreWeight ,imgs1Name,imgs2Name,"每组图形全相等" if eq else "每组图形全相似")
         #
         # 判断是否两组图片 元素 个数 全相同 , 或 个数的变换规律相同
         #
@@ -1334,8 +1368,9 @@ class Agent:
                 desc = "两组图形元素个数变化递增两相同"
             scoreAddTo.addScore(score * scoreWeight ,imgs1Name,imgs2Name,desc)
         elif len(imgsFrm1.img1Elements)>0 \
+            and  len(imgsFrm1.img1Elements)>0 and len(imgsFrm2.img1Elements)>0 \
             and len(imgsFrm1.img2Elements)/len(imgsFrm1.img1Elements)==len(imgsFrm2.img2Elements)/len(imgsFrm2.img1Elements) \
-            and   len(imgsFrm1.img3Elements)/len(imgsFrm1.img1Elements)==len(imgsFrm2.img3Elements)/len(imgsFrm2.img1Elements) : 
+            and len(imgsFrm1.img3Elements)/len(imgsFrm1.img1Elements)==len(imgsFrm2.img3Elements)/len(imgsFrm2.img1Elements) : 
             scoreAddTo.addScore(4 * scoreWeight ,imgs1Name,imgs2Name,"两组图形元素个数变化按同倍数递增")  #C-03 :
         #
         #  元素 比例的 ( C-02 的 答案案 1,4 就因为 比例 不同
@@ -1392,6 +1427,15 @@ class Agent:
                 #elif imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) 
         # END if nElementIfSame>0: #六个 图形 具有 相同 元素 个数
         
+        if (imgs1Name=="ABC" and imgs2Name.startswith("GH")) or (imgs1Name=="ADG" and imgs2Name.startswith("CF")) :
+            #imgsCG = self.getImages2(imgs1Name[2]+imgs2Name[0])
+            #imgsAI = self.getImages2(imgs1Name[0]+imgs2Name[2])
+            #print("all6ImgEquals=%s, nElementIfSame=%d" %(all6ImgEquals,nElementIfSame))
+            #print("检查 %s 与 %s ..." %(imgs1Name[0]+imgs1Name[2],imgs2Name[0]+imgs2Name[2]))
+            self.calculateImages2MatchScore(imgs1Name[0]+imgs1Name[2],imgs2Name[0]+imgs2Name[2],scoreAddTo,0.2)
+        # C-07 
+
+
         #
         # 是否 匹配 相加 属性 或 相减
         #  即:  图片A + 图片B == 图片C
@@ -1436,7 +1480,18 @@ class Agent:
                     scoreAddTo.addScore( 6 * scoreWeight,imgs1Name,imgs2Name,"前两图片像素个数相加或减==第三个图片,且宽高匹配")
                 else:
                     scoreAddTo.addScore( 1 * scoreWeight,imgs1Name,imgs2Name,"前两图片像素个数相加或减==第三个图片")
-                    
+
+        #
+        #  比较 像素 变化规律: AB , BC , AC
+        #             
+        for r1,r2,id1,id2 in zip(imgsFrm1.getImagePixelRatio(),imgsFrm2.getImagePixelRatio(),[imgs1Name[0:2],imgs1Name[1:3],imgs1Name[0:1]+imgs1Name[2:3]],[imgs2Name[0:2],imgs2Name[1:3],imgs2Name[0:1]+imgs2Name[2:3]]):
+            diff =  abs(r1 - r2)
+            if  diff< 0.05:
+                scoreAddTo.addScore(3,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.05"%(id1,id2)) 
+            elif diff < 0.1:
+                scoreAddTo.addScore(2,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.1"%(id1,id2)) 
+            elif diff < 0.15:
+                scoreAddTo.addScore(1,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.15"%(id1,id2)) 
         #
         # XOR 的例子: D-11
         # 

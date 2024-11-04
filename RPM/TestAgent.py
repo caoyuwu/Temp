@@ -16,6 +16,7 @@ from Agent2 import Agent2
 from RavensFigure import RavensFigure
 from RavensProblem import RavensProblem
 from RavensObject import RavensObject
+from ProblemSet import ProblemSet
 def getNextLine( r):
     line = r.readline().rstrip()
     while  line.strip().startswith("#"):
@@ -102,6 +103,13 @@ def loadChallengeProblemByID(problemId):
     #problemName = "Basic Problem B-01"
     problemName = "Challenge Problem "+problemId
     return  loadProblem(setName,problemName)
+
+#
+#  setName : "Basic Problems B"
+#            "Basic Problems C"
+#
+def loadProblemSet(setName:str)->ProblemSet:
+    return ProblemSet(setName)
 
 def prepareAgent(problemId) ->Agent:
     agent = Agent()
@@ -325,8 +333,21 @@ def testImageIndexOfEqualsImage(problemId,imgFrmName,otherImdIds:list):
 def testSumImgElementsBlackPonts(problemId,imgsId:str):
     agent = prepareAgent(problemId)   
     for imgId in imgsId:
-        n = ImageElement.getSumImgElementsBlackPonts(agent.getImageElements(imgId))
-        print("[%s] %s 的前景像素 = %d" %(problemId,imgId,n))
+        n = ImageElement.getSumImgElementsBlackPoints(agent.getImageElements(imgId))
+        print("[%s] %s 的前景像素 = %d, 元素个数 =%d " %(problemId,imgId,n,len(agent.getImageElements(imgId))))
+        agent.getImageElements(imgId)[0].update()
+        print("[%s] %s 的前景像素 = %d  " %(problemId,imgId,agent.getImageElements(imgId)[0].blackPixelCount))
+
+def testImgBlackPointsRatio(problemId:str,img3Id:str)->None:
+    agent = prepareAgent(problemId)   
+    # AB BC AC
+    for imgsName in [img3Id[0:2],img3Id[1:3],img3Id[0:1]+img3Id[2:3]]:
+        print( imgsName )
+        img2 = agent.getImages2(imgsName)
+        print("[%s] %s 的前景像素比例 = %f = %d/%d" %(problemId,imgsName,img2.getBlackRatio(),ImageElement.getSumImgElementsBlackPoints(agent.getImageElements(imgsName[0:1])),ImageElement.getSumImgElementsBlackPoints(agent.getImageElements(imgsName[1:2]))))
+
+    img3 = agent.getImages3(img3Id)
+    print("[%s] %s 的前景像素比例=%s" %(problemId,img3Id,img3.getImagePixelRatio()))
 
 #
 #  D-04
@@ -348,6 +369,20 @@ def testAgentSolveChallenge(problemId):
     if answer!=problem.correctAnswer and problem.correctAnswer>0:
         answerInfo = "(!!!期望结果 = %d)" % problem.correctAnswer
     print("[%s] 结果 = %d  %s" % ( problem.name, answer,answerInfo))
+
+def testSolveProblemSet(setName:str):
+    problemSet = ProblemSet(setName)
+    agent = Agent()
+    for problem in problemSet.problems:   # Your agent will solve one problem at a time.
+            #try:
+        answer = agent.Solve(problem)  # The problem will be passed to your agent as a RavensProblem object as a parameter to the Solve method
+                                            # Your agent should return its answer at the conclusion of the execution of Solve.
+            #    results.write("%s,%s,%d\n" % (set.name, problem.name, answer))
+        answerInfo = ""
+        if answer!=problem.correctAnswer and problem.correctAnswer>0:
+            answerInfo = "(!!!期望结果 =%d)" % problem.correctAnswer
+        print("[%s] : 结果 = %d %s\n" % (problem.name, answer,answerInfo))
+        #print("%s . %s : 结果 = %d %s\n" % (set.name, problem.name, answer,answerInfo))
 
     
 def main():
@@ -414,14 +449,19 @@ def main():
     #test_countImagesXOR("D-11","AB")
     
     #testSumImgElementsBlackPonts("E-04","ABC")
-    
+    #testSumImgElementsBlackPonts("C-04","DEF")
+    #testImgBlackPointsRatio("C-04","DEF")
+    #testImgBlackPointsRatio("C-04","GH8")
     
     #testAgentSolve("B-05")
     #testAgentSolve("B-10")
     
     #testAgentSolve("C-01")
     #testAgentSolve("C-02")  # 两组图形6个全相同, 只是 比例 不同
-    testAgentSolve("C-03") #[ABC-GH4]两组图形元素个数变化按同倍数递增
+    #testAgentSolve("C-03") #[ABC-GH4]两组图形元素个数变化按同倍数递增
+    #testAgentSolve("C-08")
+    #testAgentSolve("C-04")
+    testAgentSolve("C-07")
     #testAgentSolve("D-02")  # [ABC-GH1]两组图形具有相同组合
     #testAgentSolve("D-04")
     #testAgentSolve("D-11") #[BFG-AE3]每组图形全相等
@@ -435,6 +475,9 @@ def main():
     #Challenge
     #testAgentSolveChallenge("D-04") #  旋转 90度 , 
     #testAgentSolveChallenge("D-11") 
+
+    Agent._DEBUG = False
+    #testSolveProblemSet("Basic Problems C")
     return
 
     
