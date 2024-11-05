@@ -133,7 +133,7 @@ def printImageElement(imgElement,name):
         return
     height,width = imgElement.image.shape
     wholeX0,wholeY0  = width/2,height/2
-    print("[元素(%s - %s)] : 元素区间(%d,%d) - (%d,%d) 相对整图中心点偏移(%d,%d),前景像素个数=%d( 占比=%f) :" %(name,imgElement.name,imgElement.x0,imgElement.y0,imgElement.ex,imgElement.ey,(imgElement.x0+imgElement.ex)/2-wholeX0,(imgElement.y0+imgElement.ey)/2-wholeY0,imgElement.blackPixelCount,imgElement.getBlackPixelRatio()))
+    print("[元素(%s - %s)] : 元素区间(%d,%d) - (%d,%d) 相对整图中心点偏移(%d,%d),像素个数=%d/%d( 占比=%f) :" %(name,imgElement.name,imgElement.x0,imgElement.y0,imgElement.ex,imgElement.ey,(imgElement.x0+imgElement.ex)/2-wholeX0,(imgElement.y0+imgElement.ey)/2-wholeY0,imgElement.blackPixelCount,imgElement.getTotalPixel(),imgElement.getBlackPixelRatio()))
     flipedCenterPoint0X,flipedCenterPoint0Y =  imgElement.getWholeFlipedCenterPoint(0)
     print("整个上下反转后的中心点=%d,%d"%(flipedCenterPoint0X-wholeX0,flipedCenterPoint0Y-wholeY0))
     flipedCenterPoint1X,flipedCenterPoint1Y =  imgElement.getWholeFlipedCenterPoint(1)
@@ -349,6 +349,17 @@ def testImgBlackPointsRatio(problemId:str,img3Id:str)->None:
     img3 = agent.getImages3(img3Id)
     print("[%s] %s 的前景像素比例=%s" %(problemId,img3Id,img3.getImagePixelRatio()))
 
+def testIsImg2ElementsSwapped(problemId:str,img2Id:str)->None:
+    agent = prepareAgent(problemId)  
+    img2 = agent.getImages2(img2Id)
+    print("[%s] %s Img2ElementsSwapped = %s " %(problemId,img2Id,img2.isImg2ElementsSwapped()))
+
+def  testGetNotEqImgElementIdx(problemId:str,img3Id:str)->None:
+    agent = prepareAgent(problemId)  
+    img3 = agent.getImages3(img3Id)
+    i = img3.getNotEqImgElementIdx()
+    print("[%s] %s getNotEqImgElementIdx = %d" %(problemId,img3Id,i) )
+
 #
 #  D-04
 #    
@@ -401,6 +412,8 @@ def main():
     #showSplitImages("E-01","1") 
     #showSplitImages("B-04","A")
     #showSplitImages("B-10","C")
+    #showSplitImages("C-09","C")
+    #showSplitImages("C-09","2")
     #testFlipImage("B-03","A") # ** 
     #testFlipImage("B-07","9") 
     #testFlipImage("B-05","A") 
@@ -440,6 +453,8 @@ def main():
     #testImageIndexOfEqualsImage("C-02","ABC","G") # 全相同, 比例不同
     # testImageIndexOfEqualsImage("D-11","ABC","DEF") # 同 组合
       #D12
+    #testGetNotEqImgElementIdx("D-06","GH3")  
+    
     
     #test_countImagesDiff("E-03","GH","2")
     #test_countImagesDiff("E-03","AB","C")
@@ -452,7 +467,7 @@ def main():
     #testSumImgElementsBlackPonts("C-04","DEF")
     #testImgBlackPointsRatio("C-04","DEF")
     #testImgBlackPointsRatio("C-04","GH8")
-    
+    #testIsImg2ElementsSwapped("C-09","AC")
     #testAgentSolve("B-05")
     #testAgentSolve("B-10")
     
@@ -461,9 +476,14 @@ def main():
     #testAgentSolve("C-03") #[ABC-GH4]两组图形元素个数变化按同倍数递增
     #testAgentSolve("C-08")
     #testAgentSolve("C-04")
-    testAgentSolve("C-07")
+    #testAgentSolve("C-07")
+    #testAgentSolve("C-08")
+    #testAgentSolve("C-09") #??? 
+    #testAgentSolve("C-12") # 结果 = 5  (!!!期望结果 = 8)
     #testAgentSolve("D-02")  # [ABC-GH1]两组图形具有相同组合
+    #testAgentSolve("D-03")
     #testAgentSolve("D-04")
+    testAgentSolve("D-06")
     #testAgentSolve("D-11") #[BFG-AE3]每组图形全相等
     #testAgentSolve("D-10") # 没有匹配到任何 条件
     #testAgentSolve("E-03") # 前两图片像素合并==第三个图片
@@ -478,6 +498,7 @@ def main():
 
     Agent._DEBUG = False
     #testSolveProblemSet("Basic Problems C")
+    #testSolveProblemSet("Basic Problems D")
     return
 
     

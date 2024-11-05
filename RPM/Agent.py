@@ -727,14 +727,61 @@ class ImageElement:
                             imageParts.append(part)
                     else:
                         flagAdded[y,x] = True     
-        # 按元素 面积(像素个数)  从大到小 排序              
-        imageParts.sort(key=lambda e:e.getTotalPixel(),reverse=True)   
+        # 按元素 面积(像素个数)  从大到小 排序     184*184         
+        imageParts.sort(key=lambda e:(e.getTotalPixel(),e.blackPixelCount),reverse=True)  
+        #  按元素 前景像素个数  从大到小 排序   ?? 
+        #imageParts.sort(key=lambda e:e.blackPixelCount,reverse=True)   
         if nameFormat!=None:
             for i in range(len(imageParts)):
                 imageParts[i].name = nameFormat % i         
+                #print("[%d] : getTotalPixel = %d, blackPixelCount=%d" %(i,imageParts[i].getTotalPixel(),imageParts[i].blackPixelCount))
         return imageParts        
+    
+    def isElementsEqualsIgnoreOrder(imgElements1:list,imgElements2:list,similarTh=0.90,scaleTh=0.05)->bool:
+        n = len(imgElements1)
+        if n!=len(imgElements2):
+            return False
+        cmped = []
+        for i2 in range(n):
+            e2 = imgElements2[i2]
+            matched = -1
+            for i1 in  range(n):
+                if indexOf(cmped,i1)>=0:
+                    continue
+                similar,scale = e2.getImageElementSimilarScale(imgElements1[i1])
+                if similar>=similarTh and abs(scale-1)<scaleTh:
+                    cmped.append(i1)
+                    matched = i1
+                    break
+            if matched<0:
+                return False
+        return True            
+    
+    #
+    # elements 的所有元素 包含在 inElements 中
+    #
+    def isElementsContains(elements:list,inElements:list,similarTh=0.90,scaleTh=0.05)->bool:
+        n = len(elements)
+        n2 = len(inElements)
+        if n>n2:
+            return False
+        cmped = []
+        for i in range(n):
+            e = elements[i]
+            matched = -1
+            for i2 in range(n2):
+                if indexOf(cmped,i2)>=0:
+                    continue
+                similar,scale = e.getImageElementSimilarScale(inElements[i2])
+                if similar>=similarTh and abs(scale-1)<scaleTh:
+                    cmped.append(i2)
+                    matched = i2
+                    break
+            if matched<0:
+                return False    
+        return True
 
-    # END class ImageElement
+# END class ImageElement
 
 
     
@@ -792,6 +839,8 @@ class ImageElementTrans:
         self.matched = matched # similar > 给定的阈值, 即 表名 两个元素 满足 transMode 的变换规则 ; similar>=0.90
         self.similar = similar
         self.scale = scale
+
+#END class ImageElementTrans
             
 #
 #   "两个图形" 构成的对象类,  如 图形A+图形B , 描述 他们直接的 相关
@@ -937,7 +986,7 @@ class Images2:
     #
     # 判断 图片 是基于整个图 翻转
     #
-    def isWholemgElementFliped(self,elementIdx:int,flipTransMode:str):
+    def isWholemgElementFliped(self,elementIdx:int,flipTransMode:str)->bool:
         if not self.isImgElementTransMatched(elementIdx,flipTransMode):
             return False
         flipMode = getFlipModeModeByTransMode(flipTransMode)
@@ -1018,7 +1067,7 @@ class Images2:
     #
     # 判断 从 startElementIdx - endElementIdx 的元素 相同 或 相似
     #
-    def isImgElementsEqualsOrSimilar(self,startElementIdx=0,endElementIdx=0):
+    def isImgElementsEqualsOrSimilar(self,startElementIdx=0,endElementIdx=0)->bool:
         if endElementIdx==0:
             endElementIdx = len(self.transElements)
         for elementIdx in range(startElementIdx,endElementIdx):
@@ -1027,7 +1076,7 @@ class Images2:
                 return False
         return True    
     
-    def isImgElementsEquals(self,startElementIdx=0,endElementIdx=0):
+    def isImgElementsEquals(self,startElementIdx=0,endElementIdx=0)->bool:
         if endElementIdx==0:
             endElementIdx = len(self.transElements)
         for elementIdx in range(startElementIdx,endElementIdx):
@@ -1035,6 +1084,27 @@ class Images2:
             if not transInfo.matched or abs(transInfo.scale-1)>0.05 :
                 return False
         return True    
+    
+    #
+    #  两个图片 都是 两个元素,  位置 互换 , 
+    # 待测试, C-09 AC
+    #
+    def  isImgSame2SwappedElements(self)->bool:
+        if len(self.img1Elements)!=2 or len(self.img2Elements)!=2 :
+            return
+        
+        img1X1,img1Y1 = self.img1Elements[0].getCenter()
+        img2X2,img2Y2 = self.img2Elements[1].getCenter()
+
+        if abs(img1X1-img2X2)>2 or abs(img1Y1-img2Y2)>2:
+            return False
+
+        img1X2,img1Y2 = self.img1Elements[1].getCenter()
+        img2X1,img2Y1 = self.img2Elements[0].getCenter()
+
+        print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X1,img1Y1,img2X2,img2Y2))
+        print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X2,img1Y2,img2X1,img2Y1))
+        return abs(img1X2-img2X1)<=2 or abs(img1Y2-img2Y1)<=2
 
 
 
@@ -1070,13 +1140,14 @@ class Images3:
     def __init__(self,agent,name):
         self.agent = agent
         self.name = name
-        self.imgId1 = name[0:1]   # 如 "A"
-        self.imgId2 = name[1:2]   # 如 "B"
-        self.imgId3 = name[2:3]   # 如 ""
+        self.imgId1 = name[0]   # 如 "A"
+        self.imgId2 = name[1]   # 如 "B"
+        self.imgId3 = name[2]   # 如 ""
         self.img1Elements = agent.getImageElements(self.imgId1) # A 的图片元素
         self.img2Elements = agent.getImageElements(self.imgId2) # B 的图片元素
         self.img3Elements = agent.getImageElements(self.imgId3) # B 的图片元素
         self.imgsElementsLst = [self.img1Elements,self.img2Elements,self.img3Elements]
+        self.notEqImgElementIdx = -2
         #self.frmType = frmType
         
     #
@@ -1087,7 +1158,7 @@ class Images3:
         otherimgElements = self.agent.getImageElements(otherImgId) 
         nElements = len(otherimgElements)
         for i in range(3):
-            if indexOf(excludeIdxs,i)<0 and len(self.imgsElementsLst[i])==nElements and self.agent.getImages2(self.name[i:i+1]+otherImgId).isImgElementsEqualsOrSimilar():
+            if indexOf(excludeIdxs,i)<0 and len(self.imgsElementsLst[i])==nElements and self.agent.getImages2(self.name[i]+otherImgId).isImgElementsEqualsOrSimilar():
                 return i
         return -1
  
@@ -1126,6 +1197,36 @@ class Images3:
                 img2BlackPoints if img3BlackPoints==0 else img2BlackPoints/img3BlackPoints, \
                 img1BlackPoints if img3BlackPoints==0 else img1BlackPoints/img3BlackPoints \
                 ]
+    
+    #
+    #   D-06 ABC
+    #  ABC 中 ,  第 ? 组元素 不 相等
+    #
+    def getNotEqImgElementIdx(self)->int:
+        if self.notEqImgElementIdx>-2:
+            return self.notEqImgElementIdx
+        #print("....")
+        n = len(self.img1Elements)
+        if n!=len(self.img2Elements) and n!=len(self.img3Elements):
+            self.notEqImgElementIdx = -1
+            return -1
+        #imgAB = self.agent.getImage2(self.imgId1+self.imgId2)
+        #imgAC = self.agent.getImage2(self.imgId1+self.imgId3)
+        k = -1
+        for i in range(n):
+            similar1,scale1 = self.img1Elements[i].getImageElementSimilarScale(self.img2Elements[i])
+            eq = similar1>=0.90 and abs(scale1-1)<0.05  # AB 的 第 i 个元素 相等
+            if eq:
+                similar2,scale2 = self.img1Elements[i].getImageElementSimilarScale(self.img3Elements[i])
+                eq = similar2>=0.90 and abs(scale2-1)<0.05 # AC 的 第 i 个元素 相等
+            if not eq:
+                if k>=0:
+                    self.notEqImgElementIdx = -1        
+                    return -1
+                k = i
+        self.notEqImgElementIdx = k        
+        return k
+
  
 # END class Images3   
      
@@ -1302,6 +1403,7 @@ class Agent:
     # @param scoreAddTo 得分结果 累加到 scoreAddTo 中
     #
     def calculateImages3MatchScore(self,imgs1Name:str,imgs2Name:str,scoreAddTo:AnswerScore,scoreWeight=1):
+        #print("calculateImages3MatchScore %s %s" %(imgs1Name,imgs2Name))
         imgsFrm1 = self.getImages3(imgs1Name)
         imgsFrm2 = self.getImages3(imgs2Name)
         #A,B,C = imgsFrm1.imgId1,imgsFrm1.imgId2,imgsFrm1.imgId3
@@ -1314,7 +1416,7 @@ class Agent:
         #
         idxOfImgs2 = []  # 第二组图片 对应在 第一组 图片中的序号 
         for i in range(3):
-            j = imgsFrm1.getIndexOfEqualsImage(imgs2Name[i:i+1],idxOfImgs2)  # 第二组图片的 第 i 个图片, 在 第一组 中对应的序号 ( 不存在时 j==-1 )
+            j = imgsFrm1.getIndexOfEqualsImage(imgs2Name[i],idxOfImgs2)  # 第二组图片的 第 i 个图片, 在 第一组 中对应的序号 ( 不存在时 j==-1 )
             if j<0:
                 break
             idxOfImgs2.append(j)
@@ -1358,15 +1460,45 @@ class Agent:
         elementCountIncGH = len(imgsFrm2.img2Elements) - len(imgsFrm2.img1Elements)  # A-<B 图片元素的增加量
         elementCountIncHI = len(imgsFrm2.img3Elements) - len(imgsFrm2.img2Elements)  
         nElementIfSame = -1 # 如果 六个 图形 具有 相同 元素 个数,  nElementIfSame 将 >0
-        if elementCountIncAB==elementCountIncGH and elementCountIncBC==elementCountIncHI:
+        nElementIfSame1 = -1 # 如果 第一组 三个 图形 具有 相同 元素 个数, nElementIfSame1  将 >0
+        nElementIfSame2 = -1 # 如果 第二组 三个 图形 具有 相同 元素 个数, nElementIfSame1  将 >0
+        if elementCountIncAB==elementCountIncGH and elementCountIncBC==elementCountIncHI:  # 元素个数递增 相同
+            if elementCountIncAB==0 and elementCountIncBC==0 :
+                nElementIfSame1 = len(imgsFrm1.img1Elements)
+                nElementIfSame2 = len(imgsFrm2.img1Elements)
             score = 4   
-            if elementCountIncAB==0 and elementCountIncBC==0:
+            if elementCountIncAB==0 and elementCountIncBC==0 and len(imgsFrm1.img1Elements)==len(imgsFrm2.img1Elements):  
                 score += 1 
                 desc = "两组图形元素个数相同"
                 nElementIfSame =  len(imgsFrm1.img1Elements)   
             else:
                 desc = "两组图形元素个数变化递增两相同"
             scoreAddTo.addScore(score * scoreWeight ,imgs1Name,imgs2Name,desc)
+            #
+            # D-06 : 比较最后一个元素 的,  ABC - GH1
+            #
+            if nElementIfSame1>0 and nElementIfSame2>0:
+                i1 = imgsFrm1.getNotEqImgElementIdx()
+                if i1>=0  :
+                    i2=imgsFrm2.getNotEqImgElementIdx()
+                    if i2>0:
+                        if ImageElement.isElementsEqualsIgnoreOrder([imgsFrm1.img1Elements[i1],imgsFrm1.img2Elements[i1],imgsFrm1.img3Elements[i1]],[imgsFrm2.img1Elements[i2],imgsFrm2.img2Elements[i2],imgsFrm2.img3Elements[i2]]):
+                            scoreAddTo.addScore(4 * scoreWeight ,imgs1Name,imgs2Name,"第一组的第%d元素与第二组的第%d元素相同组合" %(i1,i2))
+                            pass
+            #
+            #  D-06  AB1 - BFG
+            #             
+            if elementCountIncAB==-1 and elementCountIncAB==elementCountIncBC :
+                if(   ImageElement.isElementsContains(imgsFrm1.img2Elements,imgsFrm1.img1Elements) and ImageElement.isElementsContains(imgsFrm1.img3Elements,imgsFrm1.img2Elements)   \
+                   and ImageElement.isElementsContains(imgsFrm2.img2Elements,imgsFrm2.img1Elements) and ImageElement.isElementsContains(imgsFrm2.img3Elements,imgsFrm2.img2Elements) \
+                     ):
+                    scoreAddTo.addScore(2 * scoreWeight ,imgs1Name,imgs2Name,"子集关系")
+            elif elementCountIncAB==1 and elementCountIncAB==elementCountIncBC :
+                if(   ImageElement.isElementsContains(imgsFrm1.img1Elements,imgsFrm1.img2Elements) and ImageElement.isElementsContains(imgsFrm1.img2Elements,imgsFrm1.img3Elements)   \
+                   and ImageElement.isElementsContains(imgsFrm2.img1Elements,imgsFrm2.img2Elements) and ImageElement.isElementsContains(imgsFrm2.img2Elements,imgsFrm2.img3Elements) \
+                     ):
+                    scoreAddTo.addScore(2 * scoreWeight ,imgs1Name,imgs2Name,"子集关系")
+                pass           
         elif len(imgsFrm1.img1Elements)>0 \
             and  len(imgsFrm1.img1Elements)>0 and len(imgsFrm2.img1Elements)>0 \
             and len(imgsFrm1.img2Elements)/len(imgsFrm1.img1Elements)==len(imgsFrm2.img2Elements)/len(imgsFrm2.img1Elements) \
