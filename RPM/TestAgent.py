@@ -285,8 +285,8 @@ def testImageTransInfo(problemId,imsgName):
     #print("AC = ",AC)    
     img2 = agent.getImages2(imsgName) # ImageTransformInfo
     for i in range(img2.getImgElementCount()):
-        transInfo = img2.getAllImgElementTrans(i)  # r similar,scale
-        for transVal in transInfo:
+        transInfo = img2.getAllImgElementTrans(i)  # ImageElementTrans[]
+        for transVal in transInfo:  
             if transVal.matched:
                 print("[%s - %s]元素-%d: 变换=%s 相似度=%f 大小比例=%f " % (problemId,imsgName,i,transVal.transMode,transVal.similar,transVal.scale))
         """
@@ -306,6 +306,10 @@ def testImageElementSimilarScale(problemId,imgId1,imgId2,elementdx1=0,elementdx2
     img2 = agent.getImageElements(imgId2)[elementdx2]
     similar,scale = img1.getImageElementSimilarScale(img2)
     print("[%s] 中 %s.%d 与 %s.%d 相似 = %f, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar,scale))    
+    #similar1,scale1 = img1.getImageElementSimilarScale(img2)
+    #print("[%s] 中 %s.%d 与 %s.%d 相似 = %f, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar1,scale1))   
+    #similar1,scale1 = img1.getImageElementSimilarScale(img2)
+    #print("[%s] 中 %s.%d 与 %s.%d 相似 = %f, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar1,scale1))   
  
 def testCalculaImages2MatchScore(problemId,imgs1Name,imgs2Name):
     agent = prepareAgent(problemId)    
@@ -359,6 +363,27 @@ def  testGetNotEqImgElementIdx(problemId:str,img3Id:str)->None:
     img3 = agent.getImages3(img3Id)
     i = img3.getNotEqImgElementIdx()
     print("[%s] %s getNotEqImgElementIdx = %d" %(problemId,img3Id,i) )
+
+def testIsIncSameElements(problemId:str,img2Id:str)->None:
+    agent = prepareAgent(problemId)  
+    img2 = agent.getImages2(img2Id)
+    v = img2.isIncSameElements()
+    print("[%s] %s isIncSameElements = %s" %(problemId,img2Id,v) )
+
+def test_allElementsInCenter(problemId:str,imgIds:list)->None:    
+    agent = prepareAgent(problemId)  
+    for imgId in imgIds:
+        elements = agent.getImageElements(imgId)
+        x = ImageElement.allElementsInCenterX(elements)
+        y = ImageElement.allElementsInCenterY(elements)
+        print("[%s] %s allElementsInCenter = x=%f,y=%f" %(problemId,imgId,x,y) )
+
+def test_allElementsInCenter3(problemId:str,img3Id:str)->None:    
+    agent = prepareAgent(problemId)          
+    img3 = agent.getImages3(img3Id)
+    x = img3.allElementsInCenterX()
+    y = img3.allElementsInCenterY()
+    print("[%s] %s allElementsInCenter = x=%f,y=%f" %(problemId,img3Id,x,y) )
 
 #
 #  D-04
@@ -429,6 +454,7 @@ def main():
     #testImageElementSimilarScale("C-02","A","G",1,1)  # 中 A.1 与 G.1 相似 = 1.000000, 比例 = 1.000000
     #testImageElementSimilarScale("C-11","A","B") # 两个小菱形  [C-11] 中 A 与 B 相似 = 1.000000, 比例 = 0.958333
     #testImageElementSimilarScale("B-03","A","B") #[B-03] 中 A 与 B 相似 = 0.000000, 比例 = 1.000000
+    #testImageElementSimilarScale("Challenge B-01","A","C")
 
     #testImageTransInfo("B-02","AB") # 相等图形 园+十字
     #testImageTransInfo("B-03","AB") # B-03 - AB]元素-0: 变换=FLIPH 相似度=1.000000 大小比例=1.000000 
@@ -454,7 +480,8 @@ def main():
     # testImageIndexOfEqualsImage("D-11","ABC","DEF") # 同 组合
       #D12
     #testGetNotEqImgElementIdx("D-06","GH3")  
-    
+    #test_allElementsInCenter("Challenge C-02",["A","B","C","8","6"])
+    #test_allElementsInCenter3("Challenge C-02","A87")
     
     #test_countImagesDiff("E-03","GH","2")
     #test_countImagesDiff("E-03","AB","C")
@@ -468,9 +495,13 @@ def main():
     #testImgBlackPointsRatio("C-04","DEF")
     #testImgBlackPointsRatio("C-04","GH8")
     #testIsImg2ElementsSwapped("C-09","AC")
+
+    #testIsIncSameElements("Challenge B-01","AC")
+
     #testAgentSolve("B-05")
     #testAgentSolve("B-10")
-    
+    #testAgentSolve("B-12")
+    #testAgentSolve("B-01")
     #testAgentSolve("C-01")
     #testAgentSolve("C-02")  # 两组图形6个全相同, 只是 比例 不同
     #testAgentSolve("C-03") #[ABC-GH4]两组图形元素个数变化按同倍数递增
@@ -483,7 +514,7 @@ def main():
     #testAgentSolve("D-02")  # [ABC-GH1]两组图形具有相同组合
     #testAgentSolve("D-03")
     #testAgentSolve("D-04")
-    testAgentSolve("D-06")
+    #testAgentSolve("D-06")
     #testAgentSolve("D-11") #[BFG-AE3]每组图形全相等
     #testAgentSolve("D-10") # 没有匹配到任何 条件
     #testAgentSolve("E-03") # 前两图片像素合并==第三个图片
@@ -493,12 +524,24 @@ def main():
     #testAgentSolve("C-06") #前两图片像素个数相加或减==第三个图片,且宽高匹配
     
     #Challenge
+    #testAgentSolveChallenge("B-01") 
+    #testAgentSolveChallenge("B-05") 
+    #testAgentSolveChallenge("B-06") 
+    #testAgentSolveChallenge("C-02") 
     #testAgentSolveChallenge("D-04") #  旋转 90度 , 
     #testAgentSolveChallenge("D-11") 
 
+    #tempTest()
+
     Agent._DEBUG = False
+    #testSolveProblemSet("Basic Problems B")
     #testSolveProblemSet("Basic Problems C")
     #testSolveProblemSet("Basic Problems D")
+    #testSolveProblemSet("Basic Problems E")
+    #testSolveProblemSet("Challenge Problems B")
+    #testSolveProblemSet("Challenge Problems C")
+    #testSolveProblemSet("Challenge Problems D")
+    testSolveProblemSet("Challenge Problems E")
     return
 
     
@@ -512,17 +555,15 @@ def main():
 ###################################
 
 def tempTest():
-    agent = prepareAgent("B-06")
+    #agent = prepareAgent("B-06")
+    agent = prepareAgent("Challenge B-06")
     #AC = agent.getImageTransInfo(srcImgId,dstImgId)
     #print("AC = ",AC)    
-    img2 = agent.getImages2("AC") # ImageTransformInfo
+    img2 = agent.getImages2("B3") # ImageTransformInfo
     transInfo = img2.getImgElementTrans(0,"FLIPV")  # r similar,scale FLIPH FLIPV
-    for  name,v in transInfo.items():
-        print(" %s %s  %f %f " %(name,v.matched,v.similar,v.scale))
-    print("---------------")    
-    transInfo = img2.getImgElementTrans(0,"FLIPH")  # r similar,scale FLIPH FLIPV
-    for  name,v in transInfo.items():
-        print(" %s %s  %f %f " %(name,v.matched,v.similar,v.scale))
+    print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
+    #transInfo = img2.getImgElementTrans(0,"FLIPH")  # r similar,scale FLIPH FLIPV
+    #print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
         
 
 if __name__ == "__main__":
