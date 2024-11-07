@@ -54,6 +54,20 @@ def load_problem_images(problem):
 
     return images, potential_answers
 
+def binarySearch(array:list,key:any,cmp)->int:
+    low = 0
+    high = len(array)-1
+    while low <= high:
+        mid = (low + high) >> 1
+        c = cmp(array[mid], key)
+        if c < 0:
+            low = mid + 1;
+        elif c > 0:
+            high = mid - 1;
+        else:
+            return mid;
+    return -(low + 1)
+
     #
     # return 0 : v1==v2==v3
     #        1 : v1+v2==v3
@@ -420,19 +434,23 @@ class ImageElement:
                 totalLines += 1
                 if ImageElement.isImageElementLineSegmentSimilar(smallElement,largeElement,hlineY1,hlineY2,largeScaleW,0):
                     matchedLines += 1
+                #else:
+                #    print("水平线 i=%d 匹配失败" %i)    
             if i<len(vlinesX): # 垂直线
                 vlineX1 = vlinesX[i]
                 vlineX2 = largeElement.x0+int((vlineX1-smallElement.x0)*largeScaleW+0.5)
                 totalLines += 1
                 if ImageElement.isImageElementLineSegmentSimilar(smallElement,largeElement,vlineX1,vlineX2,largeScaleH,1):
                     matchedLines += 1
+                #else:
+                #    print("垂直线 i=%d 匹配失败"  %i)  
             # 前 10 组 线 匹配程度<70% 返回 0        
             if (i==10 or i==20) and matchedLines/totalLines < 0.7:
                 #print("i=%d matchedLines/totalLines : %d/%d = %f" %(i,matchedLines,totalLines,matchedLines/totalLines))
                 ImageElement.cacheSimilarScale[cackeKey] = (0,scale)
                 return 0,scale
-        #if Agent._DEBUG:    
-        #    print("matchedLines/totalLines  = %d/%d" %(matchedLines,totalLines ))   
+        if Agent._DEBUG:    
+            print("matchedLines/totalLines  = %d/%d" %(matchedLines,totalLines ))   
         ImageElement.cacheSimilarScale[cackeKey] = (matchedLines/totalLines,scale) 
         return matchedLines/totalLines ,scale      
     
@@ -459,7 +477,8 @@ class ImageElement:
         nSegments = len(lineSegments1)   
         nSegments2 = len(lineSegments2)
         #print("hvType=%d,nSegments = %d, nSegments2 = %d" %(hvType,nSegments,len(lineSegments2))) 
-        CenterPointDelta = 3
+        # Challenge Problem B-06 : B/3 比较, 线比较多的情况下, 误差较大
+        CenterPointDelta = 3 if nSegments<5 else 5
         if nSegments!=nSegments2:
             #
             # 处理 特除情况, 在 边框线 , 
@@ -483,8 +502,22 @@ class ImageElement:
                     return True
                 #print("c2=%f,c2By1=%f,w2=%f,w1*scale=%f,%f" %(c2,c2By1,w2,w1*scale,abs(w2-w1*scale)/w2))
 
-            if( Agent._DEBUG ):
-                print("%s 位置=%d,%d : 线段数 不等 :%d!=%d 小图区间=(%d %d) 大图区间=(%d %d),minP=%d,maxP=%d " %("水平线" if hvType==0 else "垂直线",linePos1,linePos2,nSegments,nSegments2,imgElement1Pos,imgElement1PosEnd,imgElement2Pos,imgElement2PosEnd,minP, maxP ))
+            #if( Agent._DEBUG ):
+            #    print("%s 位置=%d,%d : 线段数 不等 :%d!=%d 小图区间=(%d %d) 大图区间=(%d %d),minP=%d,maxP=%d " %("水平线" if hvType==0 else "垂直线",linePos1,linePos2,nSegments,nSegments2,imgElement1Pos,imgElement1PosEnd,imgElement2Pos,imgElement2PosEnd,minP, maxP ))
+            #
+            #  Challenge Problem B-06 : B/3 比较, 差一根线
+            #     
+            
+            if  (nSegments>=4 or nSegments2>=4) :
+                #and  abs(nSegments-nSegments2)==1
+                if  nSegments==nSegments2-1 and ImageElement.isLineSegmentsContainsIn(lineSegments1,lineSegments2,imgElement1Pos,imgElement2Pos,scale):    
+                    #print("isLineSegmentsContainsIn ok")
+                    return True
+                elif nSegments==nSegments2+1 and ImageElement.isLineSegmentsContainsIn(lineSegments2,lineSegments1,imgElement2Pos,imgElement1Pos,1/scale):        
+                    #print("isLineSegmentsContainsIn ok")
+                    return True
+                #if  nSegments==nSegments2-1:
+                #    print("isLineSegmentsContainsIn fail")    
             #print(lineSegments1, lineSegments2)
             return False
         for lineSeg1,lineSeg2 in zip(lineSegments1,lineSegments2):
@@ -515,6 +548,79 @@ class ImageElement:
                 return False
         return True         
              
+    #
+    #  从 lineSegments1 中 去掉 lineSegments2 中的 线段, 返回剩余的线段
+    #          
+    def isLineSegmentsContainsIn(lineSegments:list,inLineSegments:list,seg1StartPos,seg2StartPos,scale:float)->bool:
+        # lineSeg1 是 binarySearch 中的 key, 来自于  lineSegments
+        CenterPointDelta = 4
+        def lineSegmentsCenterPosCmp(lineSeg2:tuple,lineSeg1:tuple)->int:
+            x1_start,x1_end = lineSeg1
+            x2_start,x2_end = lineSeg2
+            c1 = (x1_start+x1_end-1) / 2
+            c2 = (x2_start+x2_end-1) / 2
+            c2By1 = seg2StartPos + (c1-seg1StartPos)*scale   # c1 映射到 imageElement2 的位置
+            return   c2-c2By1
+        inLineSegMatchedIdx = []
+        i1 = 0  
+        for lineSeg1 in lineSegments:
+            x1_start,x1_end = lineSeg1
+            i = binarySearch(inLineSegments,lineSeg1,lineSegmentsCenterPosCmp)
+            if i<0:
+                i = -(i+1)
+            c1 = (x1_start+x1_end-1) / 2
+            #print("i1=%d  i=%d ..."% (i1,i))
+          
+            # 在 i 附近 找 最近的 线:
+            j = -1
+            cenerDelta = 100
+            if i<len(inLineSegments):
+                x2_start,x2_end = inLineSegments[i]
+                c2 = (x2_start+x2_end-1) / 2
+                c2By1 = seg2StartPos + (c1-seg1StartPos)*scale
+                #print("  [%d] %f "% (i,abs(c2-c2By1)))
+                cenerDelta = abs(c2-c2By1)
+                j = i
+            if i<len(inLineSegments)-1:    
+                x2_start,x2_end = inLineSegments[i+1]
+                c2 = (x2_start+x2_end-1) / 2
+                c2By1 = seg2StartPos + (c1-seg1StartPos)*scale
+                #print("  [%d] %f j=%d"% (i+1,abs(c2-c2By1),j))
+                if j<0 or cenerDelta>abs(c2-c2By1):
+                    cenerDelta = abs(c2-c2By1)
+                    j = i+1
+            if i>0:
+                x2_start,x2_end = inLineSegments[i-1]
+                c2 = (x2_start+x2_end-1) / 2
+                c2By1 = seg2StartPos + (c1-seg1StartPos)*scale
+                #print("  [%d] %f j=%d"% (i-1,abs(c2-c2By1),j))
+                if j<0 or cenerDelta>abs(c2-c2By1):
+                    cenerDelta = abs(c2-c2By1)
+                    j = i-1
+            #print("i1=%d  i=%d j=%d cenerDelta=%f 被使用=%s"% (i1,i,j,cenerDelta,indexOf(inLineSegMatchedIdx,j)>=0))
+            if j<0 or cenerDelta>CenterPointDelta or indexOf(inLineSegMatchedIdx,j)>=0:
+                return False
+            w1 = x1_end - x1_start
+            x2_start,x2_end = inLineSegments[j]
+            w2 = x2_end - x2_start
+            if w1>5 and w2>5:
+                dw = abs(w2-w1*scale)
+                if dw>4 and dw/w2>0.05: # 线段宽度
+                    return False
+            inLineSegMatchedIdx.append(j)
+            i1 += 1
+        #
+        #  剩下的 线 , 必须是 细线:
+        #     
+        for j in range(len(inLineSegments)):
+            if indexOf(inLineSegMatchedIdx,j)<0:
+                x2_start,x2_end = inLineSegments[j]
+                if x2_end-x2_start>5:
+                    return False
+        return True
+            #if  indexOf(inLineSegMatchedIdx,i)>=0:
+            #    return False
+            #lineSeg2 = 
     #
     # 从 start 到 end 之间(平均)抽取 maxCount 个 检测点 
     #  其中 前  10 个 按 (end-start)/10 的 间隔 提取
@@ -1060,69 +1166,6 @@ class Images2:
         #print("%s图(基于整图)翻转后的 中心点 = (%f,%f) , %s图中心点 =  (%f,%f) " %(imgs1Name[0:1],xA0,yA0,imgs1Name[1:2],xB0,yB0))
         return abs(x1-x2)<3 and abs(y1-y2)<3
 
-    """            
-    def parseImeElementTrans2(srcImgElement, dstImgElement,cacheTrans,transModeOnly):
-        #if( Agent._DEBUG ):
-        #    print("parseImeElementTrans %s-%s for %s.... "%(srcImgElement.name, dstImgElement.name,transModeOnly))
-        if IMGTRANSMODE_EQ not in cacheTrans and (transModeOnly=="*" or transModeOnly==IMGTRANSMODE_EQ):
-            similar,scale = srcImgElement.getImageElementSimilarScale(dstImgElement)
-            if similar>=0.85:  # ??? C-11 : 相似度 0.88
-                cacheTrans.put(IMGTRANSMODE_EQ,(similar,scale))
-            else:
-                cacheTrans.put(IMGTRANSMODE_EQ,(0,scale))
-            if transModeOnly!="*": # 不再比较其他 规则
-                return None
-            #if transModeOnly==None and similar>: 
-            
-        #
-        # 其他情况 目前只考虑 相同大小的图形
-        # 
-        hwMatched,scale = srcImgElement.isImageShapeHWSimilar(dstImgElement)
-        if not hwMatched or abs(scale-1)>0.08:
-            #  [B-07 - 52] scale == 1.06
-            #print("hwMatched=%s scale=%f" %(hwMatched,scale))
-            return None
-        #getBlackPixelRatio
-        for flipMode,flipTransMode in zip([0,1],[IMGTRANSMODE_FLIPV,IMGTRANSMODE_FLIPH]):
-            if transModeOnly=="*" or transModeOnly==flipTransMode: # = "FLIPV"  #   垂直翻转(上下)  flipMode==0
-                if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
-                    similar,scale = srcImgElement.getFlipedImage(flipMode).getImageElementSimilarScale(dstImgElement)
-                    #print("flipTransMode=%s : 相似度=%f 比例=%f" %(flipTransMode,similar,scale))
-                    if similar>=0.90: 
-                        return  (flipTransMode,similar,scale)    
-                if transModeOnly!="*": # 不再比较其他 规则
-                    return None
-        #if transModeOnly==None or transModeOnly==IMGTRANSMODE_FLIPVH:# = "FLIPVH"  #  垂直+ 水平翻转 ( 左右 ) flipMode==1
-        #    pass
-        if transModeOnly=="*" or transModeOnly==IMGTRANSMODE_FILLED:# = "FILLED"
-            #print("图1 前景像素比=%f, 图1 前景像素比=%f" %(srcImgElement.getBlackPixelRatio(),dstImgElement.getBlackPixelRatio()))
-            if srcImgElement.getBlackPixelRatio()<0.3 and dstImgElement.getBlackPixelRatio()>0.4:
-                similar,scale = srcImgElement.getFilledImage().getImageElementSimilarScale(dstImgElement)
-                #print("FILLED: 相似度=%f 比例=%f" %(similar,scale))
-                if similar>=0.90: 
-                    return  (IMGTRANSMODE_FILLED,similar,scale)    
-            if transModeOnly!="*": # 不再比较其他 规则
-                return None
-        if transModeOnly=="*" or transModeOnly==IMGTRANSMODE_UNFILLED:# = "UNFILLED"
-            if srcImgElement.getBlackPixelRatio()>0.4 and dstImgElement.getBlackPixelRatio()<0.3:
-                similar,scale = dstImgElement.getFilledImage().getImageElementSimilarScale(srcImgElement)
-                if similar>=0.90: 
-                    return  (IMGTRANSMODE_UNFILLED,similar,scale)    
-            if transModeOnly!="*": # 不再比较其他 规则
-                return None
-        return None   
-    """
-    """    
-        # 没发现例子中有 旋转 的变换规则  暂时先不考虑
-        for rotateMode, rotateTransMode in zip([1,2,3],[IMGTRANSMODE_ROTATE1,IMGTRANSMODE_ROTATE2,IMGTRANSMODE_ROTATE3]):   
-            if transModeOnly=="*" or transModeOnly==rotateTransMode:# = "ROTAGE90" #  旋转 90度
-                if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
-                    similar,scale = srcImgElement.getRotateImage(rotateMode).getImageElementSimilarScale(dstImgElement)
-                    if similar>=0.90: 
-                        return  (rotateTransMode,similar,scale)  
-                if transModeOnly!="*": # 不再比较其他 规则
-                    return None
-    """            
         
         #if transModeOnly==None or transModeOnly==IMGTRANSMODE_SIMILAR:# = "SIMILAR"   
         #    pass 
@@ -1602,6 +1645,9 @@ class Agent:
                 nElementIfSame =  len(imgsFrm1.img1Elements)   
             else:
                 desc = "两组图形元素个数变化递增量相同"
+            #
+            #  Challenge Problem C-02 : 区分 答案 6/7
+            #     
             if (imgsFrm1.allElementsInCenterY()>0  and imgsFrm2.allElementsInCenterY()>0):
                 score += 1 
                 desc  += ",且所有元素在同水平线上"

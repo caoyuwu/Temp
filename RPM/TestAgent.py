@@ -409,6 +409,8 @@ def testAgentSolveChallenge(problemId):
 def testSolveProblemSet(setName:str):
     problemSet = ProblemSet(setName)
     agent = Agent()
+    totalProblems = 0
+    correctProblems = 0
     for problem in problemSet.problems:   # Your agent will solve one problem at a time.
             #try:
         answer = agent.Solve(problem)  # The problem will be passed to your agent as a RavensProblem object as a parameter to the Solve method
@@ -417,9 +419,12 @@ def testSolveProblemSet(setName:str):
         answerInfo = ""
         if answer!=problem.correctAnswer and problem.correctAnswer>0:
             answerInfo = "(!!!期望结果 =%d)" % problem.correctAnswer
+        else:
+            correctProblems += 1    
         print("[%s] : 结果 = %d %s\n" % (problem.name, answer,answerInfo))
+        totalProblems += 1
         #print("%s . %s : 结果 = %d %s\n" % (set.name, problem.name, answer,answerInfo))
-
+    print("[%s] %d/%d" %(setName,correctProblems,totalProblems))
     
 def main():
     Agent._DEBUG = True
@@ -526,7 +531,7 @@ def main():
     #Challenge
     #testAgentSolveChallenge("B-01") 
     #testAgentSolveChallenge("B-05") 
-    #testAgentSolveChallenge("B-06") 
+    #testAgentSolveChallenge("B-06")   #  相等比较时, 线段 较多
     #testAgentSolveChallenge("C-02") 
     #testAgentSolveChallenge("D-04") #  旋转 90度 , 
     #testAgentSolveChallenge("D-11") 
