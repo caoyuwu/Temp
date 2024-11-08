@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import os
-
+from itertools import product
 
 #from CV2Utils import CV2Utils 
 
@@ -30,8 +30,8 @@ def load_problem_images(problem):
         tuple: A dictionary of main images and a dictionary of potential answers.
     """
     images = {}
-    potential_answers = {}
-
+    #potential_answers = {}
+    #imgs = {}
     for key, img in problem.figures.items():
         # Convert the image to grayscale for faster processing
         #
@@ -47,12 +47,13 @@ def load_problem_images(problem):
         # images["A"] = .../A.png
         # potential_answers["1"] = .../1.png 
         #
-        if key.isalpha():
-            images[key] = ravens_image
-        elif key.isdigit():
-            potential_answers[key] = ravens_image
-
-    return images, potential_answers
+        #if key.isalpha():
+        #    images[key] = ravens_image
+        #elif key.isdigit():
+        #    potential_answers[key] = ravens_image
+        images[key] = Image1(key,ravens_image)
+    return images #, potential_answers,imgs
+    #return images, potential_answers,imgs
 
 def binarySearch(array:list,key:any,cmp)->int:
     low = 0
@@ -81,78 +82,6 @@ def _compare3(v1,v2,v3)->bool:
     if v3>0 and abs((v1-v3) / v3 )<0.01 and abs((v2-v3) / v3 )<0.01:
         return 0
     return -1
-#
-#  images1Lst 中的前景像素 与 images2Lst 中的前景像素 的 个数 差值
-#  [E-02] AB 与 C 前景像素 相差 272/3596/33856
-#    GH 与 7 前景像素 相差 457/6023/33856   
-#  [E-03] AB 与 C 前景像素 相差 142/1848/33856
-#  [E-03] GH 与 2 前景像素 相差 534/2626/33856     534/33856=0.0158  534/2626=0.203
-#
-
-def countImagesDiff(images1Lst:list,images2Lst:list)->int:
-    count = 0
-    blackCount = 0
-    #n1 , n2 = len(images1Lst) ,len(images2Lst)
-    height, width = images1Lst[0].shape
-    for img in images1Lst:
-        h, w = img.shape
-        if height>h:
-            height = h
-        if width>w:
-            width = w
-    for img in images2Lst:
-        h, w = img.shape
-        if height>h:
-            height = h
-        if width>w:
-            width = w
-
-    for y in range(height):
-        for x in range(width):
-            v1 = False
-            v2 = False
-            for img in images1Lst:
-                if img[y,x]==0:
-                    v1 = True
-                    break
-            for img in images2Lst:
-                if img[y,x]==0:
-                    v2 = True
-                    break
-            if v1!=v2:
-                count += 1  
-                blackCount += 1
-            elif v1:
-                blackCount += 1
-                  
-    return count ,blackCount, height*width 
-
-def countImagesXOR(imagesLst:list)->int:
-    count = 0
-    blackCount = 0
-    #n1 , n2 = len(images1Lst) ,len(images2Lst)
-    height, width = imagesLst[0].shape
-    for img in imagesLst:
-        h, w = img.shape
-        if height>h:
-            height = h
-        if width>w:
-            width = w
-    image = np.full((height, width), 255, np.uint8)  #        
-    for y in range(height):
-        for x in range(width):
-            v = False
-            hasBlack = False
-            for img in imagesLst:
-                if img[y,x]==0 :
-                    v = not v
-                    hasBlack = True
-            if v:
-                count += 1
-                image[y,x] = 0
-            if hasBlack:
-                blackCount += 1     
-    return count ,blackCount, height*width ,image
 
 #
 #  y 行 最后一个 黑点
@@ -381,20 +310,20 @@ class ImageElement:
     #  返回   (图1 与  图2 的 相似度(0-1.0), 图1/图2 图形大小比例)
     #
     def getImageElementSimilarScale(self,otherImgElement):
-        #cacheSimilarScale
-        cackeKey = self.name+"/"+otherImgElement.name
-        if cackeKey in ImageElement.cacheSimilarScale:
-            #print("[getImageElementSimilarScale]使用缓存 %s" % cackeKey)
-            return ImageElement.cacheSimilarScale[cackeKey]
+        #cached
+        cacheKey = "SimilarScale["+self.name+"/"+otherImgElement.name+"]"
+        if cacheKey in ImageElement.cached:
+            #print("[getImageElementSimilarScale]使用缓存 %s" % cacheKey)
+            return ImageElement.cached[cacheKey]
         
-        #print("isImageShapeHWSimilar %s ..." % cackeKey)
+        #print("isImageShapeHWSimilar %s ..." % cacheKey)
         hwMatched,scale = self.isImageShapeHWSimilar(otherImgElement)
         if not hwMatched: # 两个图的 长 宽 比例 不一致, 认为他们 不 相似
             #if( Agent._DEBUG ):
             #    h1,w1 = self.getSize()
             #    h2,w2 = otherImgElement.getSize()
             #    print("scaleH=%f,scaleW=%f 图1(h=%d,w=%d),图2(h=%d,w=%d)" %(scale,w1 /  w2,h1,w1,h2,w2))
-            ImageElement.cacheSimilarScale[cackeKey] = (0,0)
+            ImageElement.cached[cacheKey] = (0,0)
             return 0 ,0
         #h1,w1 = self.getSize()
         #h2,w2 = otherImgElement.getSize()
@@ -447,11 +376,11 @@ class ImageElement:
             # 前 10 组 线 匹配程度<70% 返回 0        
             if (i==10 or i==20) and matchedLines/totalLines < 0.7:
                 #print("i=%d matchedLines/totalLines : %d/%d = %f" %(i,matchedLines,totalLines,matchedLines/totalLines))
-                ImageElement.cacheSimilarScale[cackeKey] = (0,scale)
+                ImageElement.cached[cacheKey] = (0,scale)
                 return 0,scale
-        if Agent._DEBUG:    
-            print("matchedLines/totalLines  = %d/%d" %(matchedLines,totalLines ))   
-        ImageElement.cacheSimilarScale[cackeKey] = (matchedLines/totalLines,scale) 
+        #if Agent._DEBUG:    
+        #    print("matchedLines/totalLines  = %d/%d" %(matchedLines,totalLines ))   
+        ImageElement.cached[cacheKey] = (matchedLines/totalLines,scale) 
         return matchedLines/totalLines ,scale      
     
     #
@@ -790,86 +719,6 @@ class ImageElement:
         imgElement.update()    
         self.transformImgs[imgKey] = imgElement
         return imgElement
-
-    #
-    # 将两个 图片元素 合并:
-    #
-    def  mergImgElements() ->list:
-        pass
-    
-    def getSumImgElementsBlackPoints(imgElements:list)->int:
-        n = 0
-        for e in imgElements:
-            n += e.blackPixelCount
-        return n    
-    def getImgElementsHeight(imgElements:list)->int:
-        y0, ey = 10000, 0
-        for e in imgElements:
-            y0 = min(y0,e.y0)
-            ey = max(ey,e.ey)
-        return ey-y0   
-    def getImgElementsWidth(imgElements:list)->int:
-        x0, ex = 10000, 0
-        for e in imgElements:
-            x0 = min(x0,e.x0)
-            ex = max(ex,e.ex)
-        return ex-x0  
-
-    def newImageElement(image,x0,y0,flagAdded):
-        height, width = image.shape
-        #newImage = np.full(image.shape, 255, np.uint8)
-        newImageEle = ImageElement(image.shape)
-        newImageEle.addPixel(x0,y0)
-        #newImage[y0,x0] = 0    
-        flagAdded[y0,x0] = True
-        #print("newImageElement - %d,%d"%(x0,y0))
-        checkPoints = [(y0,x0)]
-        while checkPoints:
-            y,x = checkPoints.pop()
-            # 检查 周围点
-            uY = y-1 if y>0 else y
-            dY = min(y+2,height) 
-            lX = x-1 if x>0 else x
-            rX = min(x+2, width)
-            for yi in range(uY,dY,1):
-                for xi in range(lX,rX,1):
-                    if not flagAdded[yi,xi] and image[yi,xi]==0:
-                        #print(" ... xi=%d,yi=%d",xi,yi)
-                        flagAdded[yi,xi] = True
-                        newImageEle.addPixel(xi,yi)
-                        checkPoints.append((yi,xi))
-        return newImageEle      
-    
-    
-     #
-     # 将图片(按像素相连)分隔成多个元素, 相连的像素分在一个元素组中
-     #
-    def splitImage(image,nameFormat:str) ->list:
-        #image0 = image.copy()
-        height, width = image.shape
-        flagAdded = np.full((height, width), False, np.bool)
-        imageParts = []
-        #while True:
-        #    addedCount = 0
-        #    if addedCount
-        for y in range(height):
-            for x in range(width):
-                if not flagAdded[y,x]:
-                    if image[y,x]==0 :
-                        part = ImageElement.newImageElement(image,x,y,flagAdded)
-                        if  part.blackPixelCount>10:  # 孤点 (噪音) 去掉
-                            imageParts.append(part)
-                    else:
-                        flagAdded[y,x] = True     
-        # 按元素 面积(像素个数)  从大到小 排序     184*184         
-        imageParts.sort(key=lambda e:(e.getTotalPixel(),e.blackPixelCount),reverse=True)  
-        #  按元素 前景像素个数  从大到小 排序   ?? 
-        #imageParts.sort(key=lambda e:e.blackPixelCount,reverse=True)   
-        if nameFormat!=None:
-            for i in range(len(imageParts)):
-                imageParts[i].name = nameFormat % i         
-                #print("[%d] : getTotalPixel = %d, blackPixelCount=%d" %(i,imageParts[i].getTotalPixel(),imageParts[i].blackPixelCount))
-        return imageParts        
     
     def isElementsEqualsIgnoreOrder(imgElements1:list,imgElements2:list,similarTh=0.90,scaleTh=0.05)->bool:
         n = len(imgElements1)
@@ -952,8 +801,297 @@ class ImageElement:
 
 # END class ImageElement
 
+#
+# copied from https://github.com/spwhitt/cclabel
+#
+class UFarray:
+    def __init__(self):
+        # Array which holds label -> set equivalences
+        self.P = []
+    def makeLabel(self):
+        r = len(self.P) #self.label
+        self.P.append(r)
+        return r
+    # Makes all nodes "in the path of node i" point to root
+    def setRoot(self, i, root):
+        while self.P[i] < i:
+            j = self.P[i]
+            self.P[i] = root
+            i = j
+        self.P[i] = root
 
+    # Finds the root node of the tree containing node i
+    def findRoot(self, i):
+        while self.P[i] < i:
+            i = self.P[i]
+        return i
     
+    # Finds the root of the tree containing node i
+    # Simultaneously compresses the tree
+    def find(self, i):
+        root = self.findRoot(i)
+        self.setRoot(i, root)
+        return root
+    
+    # Joins the two trees containing nodes i and j
+    # Modified to be less agressive about compressing paths
+    # because performance was suffering some from over-compression
+    def union(self, i, j):
+        if i != j:
+            root = self.findRoot(i)
+            rootj = self.findRoot(j)
+            if root > rootj: root = rootj
+            self.setRoot(j, root)
+            self.setRoot(i, root)
+    
+    def flatten(self):
+        for i in range(1, len(self.P)):
+            self.P[i] = self.P[self.P[i]]
+#End  __init__           
+
+class Image1:
+    def __init__(self,name:str,image):
+        self.name = name
+        self.image = image
+        self._blackPixelCount = -1
+        self._elementsHeight = -1
+        self._elementsWidth = -1
+    def getImageElements(self)->list:
+        try:
+            return self._imgElements  
+        except AttributeError as e:
+            pass
+        self._imgElements = Image1.splitImage(self.image,self.name+"[%d]")
+        return self._imgElements  
+        
+     #
+     # 将图片(按像素相连)分隔成多个元素, 相连的像素分在一个元素组中
+     #
+    def splitImage(image,nameFormat:str)->list:
+        height ,width = image.shape
+        uf = UFarray() # 
+        uf.makeLabel() # 忽略 0
+        labels = np.full((height, width), 0, np.int32)
+        #   -------------
+        #   | a | b | c |
+        #   -------------
+        #   | d | e |   |
+        #   -------------
+        #   |   |   |   |
+        #   -------------
+        for y, x in product(range(height), range(width)):
+            # If the current pixel is 0, it's obviously not a component...
+            if image[y,x] != 0:
+                continue
+            if y > 0 and image[y-1,x] == 0:
+                # 上行(b)) 有,  
+                labels[y,x] = labels[y-1,x]
+
+            elif x+1 < width and y > 0 and image[y-1,x+1] == 0:
+                # 右上(c) 有
+                c = labels[ y-1,x+1]
+                labels[y,x] = c   # = 右上(c)
+                if x > 0 and image[y-1,x-1] == 0:
+                    # 左上 也有
+                    a = labels[y-1,x-1 ]
+                    uf.union(c, a)  #  合并到  左上, 
+    
+                elif x > 0 and image[y,x-1] == 0:
+                    # # 左(d)  也有
+                    d = labels[y,x-1] #  合并到  左, 
+                    uf.union(c, d)
+
+            elif x > 0 and y > 0 and image[y-1,x-1] == 0:
+                # 左上(a) 有 , 
+                labels[y,x] = labels[y-1,x-1 ]
+
+            elif x > 0 and image[y,x-1] == 0:
+                # 左 (d)
+                labels[y,x] = labels[y,x-1]
+    
+            else: 
+                labels[y,x] = uf.makeLabel()
+                #print("(%d,%d) 新生成 Label =%d" %(y,x,labels[x, y]))
+
+        # 精简
+        uf.flatten()        
+
+        imgElementsByLabel = {}
+        imgElements = []
+        for y, x in product(range(height), range(width)):
+            if labels[y,x]==0:
+                continue
+            label = uf.findRoot(labels[y,x])
+            if label not in imgElementsByLabel:
+                imgElementsByLabel[label] = ImageElement(image.shape)
+                imgElements.append(imgElementsByLabel[label])
+            imgElementsByLabel[label].addPixel(x,y)
+        # 去掉 <10 的 点:
+        for i in range(len(imgElements)-1,-1,-1):
+            if imgElements[i].blackPixelCount<10:
+                del imgElements[i]
+
+        #imgElements[0].addPixel(0,0)    
+        # 按元素 面积(像素个数)  从大到小 排序     184*184         
+        imgElements.sort(key=lambda e:(e.getTotalPixel(),e.blackPixelCount),reverse=True)  
+        #  按元素 前景像素个数  从大到小 排序   ?? 
+        #imageParts.sort(key=lambda e:e.blackPixelCount,reverse=True)   
+        if nameFormat!=None:
+            for i in range(len(imgElements)):
+                imgElements[i].name = nameFormat % i         
+                #print("[%d] : getTotalPixel = %d, blackPixelCount=%d" %(i,imageParts[i].getTotalPixel(),imageParts[i].blackPixelCount))
+        return imgElements       
+
+    #
+    # 整个图片作为一个元素
+    #
+    def asImgElement(self)->ImageElement:
+        try:
+            return self._asImgElement
+        except AttributeError as e:
+            pass
+        self._asImgElement = ImageElement(None,self.name)
+        self._asImgElement.image = self.image
+        elements = self.getImageElements()
+        if len(elements)==0:
+            self._asImgElement.x0 = 0
+            self._asImgElement.y0 = 0
+            self._asImgElement.ex = 0
+            self._asImgElement.ey = 0
+            return lf._asImgElement    
+
+        for e in elements:
+            self._asImgElement.blackPixelCount += e.blackPixelCount
+            if e==elements[0]:
+                self._asImgElement.x0 = e.x0
+                self._asImgElement.y0 = e.y0
+                self._asImgElement.ex = e.ex
+                self._asImgElement.ey = e.ey
+            else:
+                if self._asImgElement.x0>e.x0:
+                   self._asImgElement.x0 = e.x0     
+                if self._asImgElement.y0>e.y0:
+                   self._asImgElement.y0 = e.y0     
+                if self._asImgElement.ex<e.ex:
+                    self._asImgElement.ex = e.ex     
+                if self._asImgElement.ey<e.ey:
+                    self._asImgElement.ey = e.ey     
+        return self._asImgElement        
+    
+    def getRotateImage(self,rotaMode:int):
+        return self.asImgElement().getRotateImage(rotaMode)
+    
+    #
+    #  images1Lst 中的前景像素 与 images2Lst 中的前景像素 的 个数 差值
+    #  [E-02] AB 与 C 前景像素 相差 272/3596/33856
+    #    GH 与 7 前景像素 相差 457/6023/33856   
+    #  [E-03] AB 与 C 前景像素 相差 142/1848/33856
+    #  [E-03] GH 与 2 前景像素 相差 534/2626/33856     534/33856=0.0158  534/2626=0.203
+    #
+
+    def countImagesDiff(images1Lst:list,images2Lst:list)->int:
+        cacheKey = "ImagesDiff("+("".join(map(lambda v:v.name,images1Lst)))+","+("".join(map(lambda v:v.name,images2Lst)))+")"
+        if cacheKey in Image1.cached:
+            #print("使用缓存 ",cacheKey)
+            return Image1.cached[cacheKey]
+        count = 0
+        blackCount = 0
+        #n1 , n2 = len(images1Lst) ,len(images2Lst)
+        height, width = images1Lst[0].image.shape
+        for img in images1Lst:
+            h, w = img.image.shape
+            if height>h:
+                height = h
+            if width>w:
+                width = w
+        for img in images2Lst:
+            h, w = img.image.shape
+            if height>h:
+                height = h
+            if width>w:
+                width = w
+
+        for y in range(height):
+            for x in range(width):
+                v1 = False
+                v2 = False
+                for img in images1Lst:
+                    if img.image[y,x]==0:
+                        v1 = True
+                        break
+                for img in images2Lst:
+                    if img.image[y,x]==0:
+                        v2 = True
+                        break
+                if v1!=v2:
+                    count += 1  
+                    blackCount += 1
+                elif v1:
+                    blackCount += 1
+        Image1.cached[cacheKey] = (count ,blackCount, height*width)            
+        return Image1.cached[cacheKey] #count ,blackCount, height*width 
+
+    def countImagesXOR(imagesLst:list)->int:
+        cacheKey = "ImagesXOR("+("".join(map(lambda v:v.name,imagesLst)))+")"
+        if cacheKey in Image1.cached:
+            return Image1.cached[cacheKey]
+        count = 0
+        blackCount = 0
+        #n1 , n2 = len(images1Lst) ,len(images2Lst)
+        height, width = imagesLst[0].image.shape
+        for img in imagesLst:
+            h, w = img.image.shape
+            if height>h:
+                height = h
+            if width>w:
+                width = w
+        image = np.full((height, width), 255, np.uint8)  #        
+        for y in range(height):
+            for x in range(width):
+                v = False
+                hasBlack = False
+                for img in imagesLst:
+                    if img.image[y,x]==0 :
+                        v = not v
+                        hasBlack = True
+                if v:
+                    count += 1
+                    image[y,x] = 0
+                if hasBlack:
+                    blackCount += 1    
+        Image1.cached[cacheKey] = (count ,blackCount, height*width ,image)             
+        return Image1.cached[cacheKey] #count ,blackCount, height*width ,image
+
+    def getSumImgElementsBlackPoints(self)->int:
+        if self._blackPixelCount>=0:
+            #print("使用缓存 ...")
+            return self._blackPixelCount
+        self._blackPixelCount = 0
+        for e in self.getImageElements():
+            self._blackPixelCount += e.blackPixelCount
+        return self._blackPixelCount
+    
+    def getImgElementsHeight(self)->int:
+        if self._elementsHeight>=0:
+            return self._elementsHeight
+        y0, ey = 10000, 0
+        for e in self.getImageElements():
+            y0 = min(y0,e.y0)
+            ey = max(ey,e.ey)
+        self._elementsHeight = ey-y0    
+        return self._elementsHeight 
+    def getImgElementsWidth(self)->int:
+        if self._elementsWidth>=0:
+            return self._elementsWidth
+        x0, ex = 10000, 0
+        for e in self.getImageElements():
+            x0 = min(x0,e.x0)
+            ex = max(ex,e.ex)
+        self._elementsWidth = ex-x0       
+        return self._elementsWidth      
+
+
+#END class Image1
 
 #
 # 两个图片比较 结果常量
@@ -1028,10 +1166,12 @@ class Images2:
     def __init__(self,agent,name:str):
         self.agent = agent
         self.name = name
-        self.img1Id = name[0:1]   # 如 "A"
-        self.img2Id = name[1:2]   # 如 "C"
-        self.img1Elements = agent.getImageElements(self.img1Id)  # A  ImageElement[]
-        self.img2Elements = agent.getImageElements(self.img2Id)  # C  ImageElement[]
+        self.img1Id = name[0]   # 如 "A"
+        self.img1 = agent.getImage1(self.img1Id)
+        self.img2Id = name[1]   # 如 "C"
+        self.img2 = agent.getImage1(self.img2Id)
+        self.img1Elements = self.img1.getImageElements()  # A  ImageElement[]
+        self.img2Elements = self.img2.getImageElements()  # C  ImageElement[]
         self.transElements = []  # 由 class ImageElementTrans 描述
         for _ in range(min(len(self.img1Elements),len(self.img2Elements))):
             self.transElements.append({})
@@ -1053,8 +1193,8 @@ class Images2:
     #  img1 / img2 的 相像素 比例
     #
     def getBlackRatio(self):
-        n1 = ImageElement.getSumImgElementsBlackPoints(self.img1Elements)
-        n2 = ImageElement.getSumImgElementsBlackPoints(self.img2Elements)
+        n1 = self.img1.getSumImgElementsBlackPoints()
+        n2 = self.img2.getSumImgElementsBlackPoints()
         return  n1 if n2==0 else n1/n2
    
     def getAllImgElementTrans(self,elementIdx:int,transModeLst:list)->list:
@@ -1234,7 +1374,10 @@ class Images2:
         print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X2,img1Y2,img2X1,img2Y1))
         return abs(img1X2-img2X1)<=2 or abs(img1Y2-img2Y1)<=2
 
-
+    def getImagePixelRatio(self)->list:
+        img1BlackPoints = self.img1.getSumImgElementsBlackPoints()
+        img2BlackPoints = self.img2.getSumImgElementsBlackPoints()
+        return  -1000 if img2BlackPoints==0 else img1BlackPoints/img2BlackPoints
 
 
 # End class Images2
@@ -1270,11 +1413,14 @@ class Images3:
         self.agent = agent
         self.name = name
         self.imgId1 = name[0]   # 如 "A"
+        self.img1 = agent.getImage1(self.imgId1)
         self.imgId2 = name[1]   # 如 "B"
+        self.img2 = agent.getImage1(self.imgId2)
         self.imgId3 = name[2]   # 如 ""
-        self.img1Elements = agent.getImageElements(self.imgId1) # A 的图片元素
-        self.img2Elements = agent.getImageElements(self.imgId2) # B 的图片元素
-        self.img3Elements = agent.getImageElements(self.imgId3) # B 的图片元素
+        self.img3 = agent.getImage1(self.imgId3)
+        self.img1Elements = self.img1.getImageElements() # A 的图片元素
+        self.img2Elements = self.img2.getImageElements() # B 的图片元素
+        self.img3Elements = self.img3.getImageElements() # C 的图片元素
         self.imgsElementsLst = [self.img1Elements,self.img2Elements,self.img3Elements]
         self.notEqImgElementIdx = -2
         #self.frmType = frmType
@@ -1297,31 +1443,31 @@ class Images3:
     #         0 : 图1 == 图2 == 图3
     #
     def compareImgPixelCount(self):
-        img1BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img1Elements)
-        img2BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img2Elements)
-        img3BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img3Elements)
+        img1BlackPoints = self.img1.getSumImgElementsBlackPoints()
+        img2BlackPoints = self.img2.getSumImgElementsBlackPoints()
+        img3BlackPoints = self.img3.getSumImgElementsBlackPoints()
         return _compare3(img1BlackPoints,img2BlackPoints,img3BlackPoints)
     
     
     def compareImgPixelHeight(self)->bool:
-        h1 = ImageElement.getImgElementsHeight(self.img1Elements)
-        h2 = ImageElement.getImgElementsHeight(self.img2Elements)
-        h3 = ImageElement.getImgElementsHeight(self.img3Elements)
+        h1 = self.img1.getImgElementsHeight()
+        h2 = self.img2.getImgElementsHeight()
+        h3 = self.img3.getImgElementsHeight()
         return _compare3(h1,h2,h3)
     
     def compareImgPixelWidth(self)->bool:
-        w1 = ImageElement.getImgElementsWidth(self.img1Elements)
-        w2 = ImageElement.getImgElementsWidth(self.img2Elements)
-        w3 = ImageElement.getImgElementsWidth(self.img3Elements)
+        w1 = self.img1.getImgElementsWidth()
+        w2 = self.img2.getImgElementsWidth()
+        w3 = self.img3.getImgElementsWidth()
         return _compare3(w1,w2,w3)
     
     #
     # 返回 A/B, B/C , A/C 的像素比例
     #
     def getImagePixelRatio(self)->list:
-        img1BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img1Elements)
-        img2BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img2Elements)
-        img3BlackPoints = ImageElement.getSumImgElementsBlackPoints(self.img3Elements)
+        img1BlackPoints = self.img1.getSumImgElementsBlackPoints()
+        img2BlackPoints = self.img2.getSumImgElementsBlackPoints()
+        img3BlackPoints = self.img3.getSumImgElementsBlackPoints()
         return [img1BlackPoints if img2BlackPoints==0 else img1BlackPoints/img2BlackPoints, \
                 img2BlackPoints if img3BlackPoints==0 else img2BlackPoints/img3BlackPoints, \
                 img1BlackPoints if img3BlackPoints==0 else img1BlackPoints/img3BlackPoints \
@@ -1417,32 +1563,21 @@ class Agent:
         This init method is only called once when the Agent is instantiated
         while the Solve method will be called multiple times.
         """
-        self.images = {}
-        self.potential_answers = {}
-        self.imagesEles = {}
-        self.imagesFrame = {} 
-        ImageElement.cacheSimilarScale = {}
+        
 
     def  getImage(self,imageId:str):
-        if imageId>="1" and imageId<="9":
-            return self.potential_answers[imageId]
-        else:
-            return  self.images[imageId]    
+        return self.getImage1(imageId).image
+    
+    def getImage1(self,imageId:str)->Image1:
+        if len(imageId)!=1:
+            raise BaseException("Invalie imageId = ",imageId)
+        return self.images[imageId]
     #
     # @param imageId image id,  如 "A", "B", "C", "1", "2" 等
     # @return 返回 数组: [元素1,元素2,...]
     #
     def  getImageElements(self,imageId:str) ->list:
-        imgElemets = self.imagesEles.get(imageId)
-        if imgElemets!=None :
-            return imgElemets
-        if imageId>="1" and imageId<="9":
-            image =  self.potential_answers[imageId]
-        else:
-            image =  self.images[imageId]    
-        imgElemets = ImageElement.splitImage(image,imageId+"[%d]")
-        self.imagesEles[imageId] = imgElemets
-        return imgElemets
+        return self.getImage1(imageId).getImageElements()
     
     #
     #  getImages2("A","C")
@@ -1494,7 +1629,10 @@ class Agent:
                 # Challenge Problem B-05 的 权重太大
                 scoreFactor /= 10
         #print("[%s-%s] scoreFactor=%f,minElementCount=%f = min(%d,%d); elementCountDiff1=%d,elementCountDiff2=%d" % (imgs1Name,imgs2Name,scoreFactor,minElementCount,imgsFrm1.getImgElementCount(),imgsFrm2.getImgElementCount(),elementCountDiff1,elementCountDiff2))
+        allElementsMatchedTransMode = []
         for elementIdx in range( minElementCount ):
+            elementsMatchedTransMode = []
+            allElementsMatchedTransMode.append(elementsMatchedTransMode)
             eqTrans = imgsFrm1.getImgElementTrans(elementIdx,IMGTRANSMODE_EQ)
             if eqTrans.matched:  # 如果 两个 图片 相等, 不再判断 其他 转换:
                 forAllTrans = [eqTrans]
@@ -1524,6 +1662,7 @@ class Agent:
                 #    print("  %s : 检测是否满足变换规则 %s 结果matched = %s, similar=%f " %(imgs2Name,transInfo.transMode,transInfo2.matched,transInfo2.similar))
                 if not transInfo2.matched:
                     continue
+                elementsMatchedTransMode.append(transInfo.transMode)
                 score = 10 
                 # 翻转, 的情况下, 如果 都是基于 整个 图 反转, 加分
                 desc2 = ""
@@ -1539,8 +1678,27 @@ class Agent:
                         # B-05
                         score += 3 
                         desc2 += "(基于整图翻转)"
+
                 scoreAddTo.addScore(score*scoreFactor*scoreWeight,imgs1Name,imgs2Name,"元素%d匹配相同变换%s%s"%(elementIdx,transInfo.transMode,desc2))
-                    
+
+        #
+        # Challenge Problem B-10 : 如果 整图 旋转  AB/C4 
+        #
+        if elementCountDiff1==elementCountDiff2  and elementCountDiff1==0 and imgsFrm1.getImgElementCount()==imgsFrm2.getImgElementCount() and minElementCount>1:
+            checkAllRota = -1
+            for rotaMode, transMode in zip([1,2,3], [IMGTRANSMODE_ROTATE1,IMGTRANSMODE_ROTATE2,IMGTRANSMODE_ROTATE3]):
+                allEleMatched = True
+                for elementIdx in range( minElementCount ):
+                    if transMode not in allElementsMatchedTransMode[elementIdx]:
+                        allEleMatched = False
+                        break
+                if allEleMatched:
+                    checkAllRota = rotaMode
+                    break    
+            if checkAllRota>0:
+                #print("检查 %s/%s 是否满足整体旋转 %d ..." %(imgs1Name,imgs2Name,checkAllRota))        
+                if imgsFrm1.img1.getRotateImage(checkAllRota).isEquals(imgsFrm1.img2.asImgElement()) and imgsFrm2.img1.getRotateImage(checkAllRota).isEquals(imgsFrm2.img2.asImgElement()):
+                    scoreAddTo.addScore(3*scoreWeight,imgs1Name,imgs2Name,"整图旋转")
         #
         # 考虑 元素 增加 / 减少 的规则:
         #        
@@ -1564,6 +1722,19 @@ class Agent:
             else:
                 scoreAddTo.addScore(1* scoreWeight,imgs1Name,imgs2Name,"两组元素增减个数相同")
 
+        #
+        # 判断像素 比例 变化规律
+        #
+        
+        r1 = imgsFrm1.getImagePixelRatio()
+        r2 = imgsFrm2.getImagePixelRatio()
+        diff = abs(r1-r2)
+        if  diff< 0.05:
+            scoreAddTo.addScore(3,imgs1Name,imgs2Name,"两图片素个数变化率相差<0.05") 
+        elif diff < 0.1:
+            scoreAddTo.addScore(2,imgs1Name,imgs2Name,"两图片像素个数变化率相差<0.1") 
+        elif diff < 0.15:
+            scoreAddTo.addScore(1,imgs1Name,imgs2Name,"两图片像素个数变化率相差<0.15") 
 
 
     #END method calculateImages2MatchScore
@@ -1763,23 +1934,17 @@ class Agent:
         # 
         if caseAddOrSubEq: # 处理 图片A + 图片B == 图片C 的情况
             # A+B==C
-            diffABC,_,totalPixcelABC = countImagesDiff([self.getImage(imgs1Name[0:1]),self.getImage(imgs1Name[1:2])],[self.getImage(imgs1Name[2:3])])  
-            if diffABC/totalPixcelABC<=0.02:
-                diffGHI,_,totalPixcelGHI = countImagesDiff([self.getImage(imgs2Name[0:1]),self.getImage(imgs2Name[1:2])],[self.getImage(imgs2Name[2:3])])  
-                if diffGHI/totalPixcelGHI<=0.02:
-                    scoreAddTo.addScore( 6 * scoreWeight,imgs1Name,imgs2Name,"前两图片像素合并==第三个图片")
-                caseAddOrSubEq = False    
-                caseXorEq = False    
-            
-        if caseAddOrSubEq: # 处理 图片A - 图片B == 图片C 的情况   
-            diffCBA,_,totalPixcelCBA = countImagesDiff([self.getImage(imgs1Name[2:3]),self.getImage(imgs1Name[1:2])],[self.getImage(imgs1Name[0:1])])          
-            if diffCBA/totalPixcelCBA<=0.02: #E-04
-                diffIHG,_,totalPixcelIHG = countImagesDiff([self.getImage(imgs2Name[2:3]),self.getImage(imgs2Name[1:2])],[self.getImage(imgs2Name[0:1])])  
-                if diffIHG/totalPixcelIHG<=0.02:
-                    scoreAddTo.addScore( 6 * scoreWeight,imgs1Name,imgs2Name,"前两图片像素相减==第三个图片")
-                caseAddOrSubEq = False    
-                caseXorEq = False  
-        
+            # B+C==A
+            # A+C==B
+            for abc in ((0,1,2),(1,2,0),(0,2,1)):
+                diffABC,_,totalPixcelABC = Image1.countImagesDiff([self.getImage1(imgs1Name[abc[0]]),self.getImage1(imgs1Name[abc[1]])],[self.getImage1(imgs1Name[abc[2]])])  
+                if diffABC/totalPixcelABC<=0.02:
+                    diffGHI,_,totalPixcelGHI = Image1.countImagesDiff([self.getImage1(imgs2Name[abc[0]]),self.getImage1(imgs2Name[abc[1]])],[self.getImage1(imgs2Name[abc[2]])])  
+                    if diffGHI/totalPixcelGHI<=0.02:
+                        scoreAddTo.addScore( 6 * scoreWeight,imgs1Name,imgs2Name,"第%d和%d图片像素合并==第%d个图片"%(abc[0]+1,abc[1]+1,abc[2]+1))
+                    caseAddOrSubEq = False    
+                    caseXorEq = False    
+                    break
         
         # E-04 : 答案 2 与 8 都一样
         if caseAddOrSubEq: # 处理 图片A.像素个数 + 图片B.像素个数 == 图片C 的情况  E-04   
@@ -1799,6 +1964,8 @@ class Agent:
         #             
         for r1,r2,id1,id2 in zip(imgsFrm1.getImagePixelRatio(),imgsFrm2.getImagePixelRatio(),[imgs1Name[0:2],imgs1Name[1:3],imgs1Name[0:1]+imgs1Name[2:3]],[imgs2Name[0:2],imgs2Name[1:3],imgs2Name[0:1]+imgs2Name[2:3]]):
             diff =  abs(r1 - r2)
+            #if diff<0.15:
+            #    print("diff = %f" %diff)
             if  diff< 0.05:
                 scoreAddTo.addScore(3,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.05"%(id1,id2)) 
             elif diff < 0.1:
@@ -1825,7 +1992,10 @@ class Agent:
 #############################################################
     def solve_2x2(self):
         answers = []
-        for answer in self.potential_answers:
+        #for answer in self.potential_answers:
+        for answer in self.images:
+            if not answer.isdigit():
+                continue
             answerScore = AnswerScore(int(answer))   
             self.calculateImages2MatchScore("AB","C"+answer,answerScore)  # 行比较 : 第一行 与 第 三 行
             self.calculateImages2MatchScore("AC","B"+answer,answerScore)
@@ -1845,7 +2015,9 @@ class Agent:
 
     def solve_3x3(self):
         answers = []
-        for answer in self.potential_answers:
+        for answer in self.images:
+            if not answer.isdigit():
+                continue
             answerScore = AnswerScore(int(answer)) 
     #         A     B    C    
     #         D     E    F
@@ -1874,6 +2046,14 @@ class Agent:
         answers = AnswerScore.getMaxScoreAnswers(answers)
         return answers[0].answer
 
+    def prepareProblem(self, problem):
+        self.images = load_problem_images(problem)
+        self.imagesFrame = {}
+        ImageElement.cached = {}
+        Image1.cached = {}
+        Images2.cached = {}
+        Images3.cached = {}
+
     def Solve(self, problem):
         """
         Primary method for solving incoming Raven's Progressive Matrices.
@@ -1898,23 +2078,18 @@ class Agent:
             
         Don't forget to uncomment the imports as needed!
         """
-        answer = -1
-        self.images, self.potential_answers = load_problem_images(problem)
-        self.imagesEles = {}
-        self.imagesFrame = {} 
-        ImageElement.cacheSimilarScale = {}
+        self.prepareProblem(problem)
         #print("\n")
-        print("--->This Problem: ", problem.name)
+        #print("--->This Problem: ", problem.name)
 
         if problem.problemType == "2x2":
             # if problem.name[-4:] == 'B-04':
                 # print("Debug B12:", problem.name[-4:])
-            answer = self.solve_2x2()
+            return self.solve_2x2()
         elif problem.problemType == "3x3":
-            answer = self.solve_3x3()
-            pass
+            return self.solve_3x3()
 
-        return answer
+        return -1
 
 #
 #####################################

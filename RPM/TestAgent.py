@@ -8,10 +8,13 @@ import random
 import re
 import os
 import json
+from datetime import datetime
+from time import time
 from CV2Utils import CV2Utils 
 #import json
-from Agent import Agent,APPPATH,load_problem_images ,countImagesDiff,countImagesXOR
-from Agent import ImageElement
+from Agent import Agent,APPPATH 
+#,countImagesDiff,countImagesXOR
+from Agent import ImageElement,Image1
 from Agent2 import Agent2
 from RavensFigure import RavensFigure
 from RavensProblem import RavensProblem
@@ -104,6 +107,13 @@ def loadChallengeProblemByID(problemId):
     problemName = "Challenge Problem "+problemId
     return  loadProblem(setName,problemName)
 
+def loadProblemByID(problemId):
+    if problemId.startswith("Challenge "):
+        problemId = problemId[10:]
+        return  loadChallengeProblemByID(problemId)    
+    else:
+        return loadBasicProblemByID(problemId)
+
 #
 #  setName : "Basic Problems B"
 #            "Basic Problems C"
@@ -113,18 +123,13 @@ def loadProblemSet(setName:str)->ProblemSet:
 
 def prepareAgent(problemId) ->Agent:
     agent = Agent()
-    if problemId.startswith("Challenge "):
-        problemId = problemId[10:]
-        problem =  loadChallengeProblemByID(problemId)    
-    else:
-        problem =  loadBasicProblemByID(problemId)
-    agent.images, agent.potential_answers = load_problem_images(problem)
+    agent.prepareProblem(loadProblemByID(problemId))
     return agent
 
 def prepareAgent4Challenge(problemId):
     agent = Agent()
     problem =  loadChallengeProblemByID(problemId)
-    agent.images, agent.potential_answers = load_problem_images(problem)
+    agent.prepareProblem(problem)
     return agent
 
 def printImageElement(imgElement,name):
@@ -140,7 +145,9 @@ def printImageElement(imgElement,name):
     print("整个左右反转后的中心点=%d,%d"%(flipedCenterPoint1X-wholeX0,flipedCenterPoint1Y-wholeY0))
     CV2Utils.printImage2(imgElement.image)
     
-
+#
+# showSplitImages("B-12","A")
+#
 def  showSplitImages(problemId,imgId):
     agent = prepareAgent(problemId)
     imgs = agent.getImageElements(imgId)
@@ -223,6 +230,7 @@ def testImageFilledRatio(problemId,imgId):
 
 def test_countImagesDiff(problemId,imgs1Id:str,imgs2Id:str):
     agent = prepareAgent(problemId)
+    """
     imgs1 = []
     imgs2 = []
     for imgId in imgs1Id:
@@ -231,6 +239,17 @@ def test_countImagesDiff(problemId,imgs1Id:str,imgs2Id:str):
          imgs2.append(agent.getImage(imgId))
     diff,blackCount,size = countImagesDiff(imgs1,imgs2)     
     print("[%s] %s 与 %s 前景像素 相差 %d/%d/%d" %(problemId,imgs1Id,imgs2Id,diff,blackCount,size))
+    """
+    imgs1 = []
+    imgs2 = []
+    for imgId in imgs1Id:
+         imgs1.append(agent.getImage1(imgId))
+    for imgId in imgs2Id:
+         imgs2.append(agent.getImage1(imgId))
+    diff,blackCount,size = Image1.countImagesDiff(imgs1,imgs2) 
+    print("[%s] %s 与 %s 前景像素 相差 %d/%d/%d" %(problemId,imgs1Id,imgs2Id,diff,blackCount,size))
+    #diff,blackCount,size = Image1.countImagesDiff(imgs1,imgs2) 
+    #print("[%s] %s 与 %s 前景像素 相差 %d/%d/%d" %(problemId,imgs1Id,imgs2Id,diff,blackCount,size))
     
 def test_countImagesXOR(problemId,imgsId:str):
     agent = prepareAgent(problemId)
@@ -339,6 +358,11 @@ def testSumImgElementsBlackPonts(problemId,imgsId:str):
     for imgId in imgsId:
         n = ImageElement.getSumImgElementsBlackPoints(agent.getImageElements(imgId))
         print("[%s] %s 的前景像素 = %d, 元素个数 =%d " %(problemId,imgId,n,len(agent.getImageElements(imgId))))
+        img = agent.getImage1(imgId)
+        n = img.getSumImgElementsBlackPoints()
+        print("    ...%d",n)
+        n = img.getSumImgElementsBlackPoints()
+        print("    ...%d",n)
         agent.getImageElements(imgId)[0].update()
         print("[%s] %s 的前景像素 = %d  " %(problemId,imgId,agent.getImageElements(imgId)[0].blackPixelCount))
 
@@ -385,12 +409,18 @@ def test_allElementsInCenter3(problemId:str,img3Id:str)->None:
     y = img3.allElementsInCenterY()
     print("[%s] %s allElementsInCenter = x=%f,y=%f" %(problemId,img3Id,x,y) )
 
+def test_RotateImage(problemId:str,img2Id:str,rotaMode:int)->None:
+    agent = prepareAgent(problemId)          
+    img = agent.getImages2(img2Id)
+    #imgsFrm1.img1.getRotateImage(checkAllRota).isEquals(imgsFrm1.img2.asImgElement()) 
+    img1 = img.img1.getRotateImage(rotaMode)
+    printImageElement(img1,problemId)
 #
 #  D-04
 #    
 def testAgentSolve(problemId):  
     agent = Agent()
-    problem =  loadBasicProblemByID(problemId)
+    problem =  loadProblemByID(problemId)
     answer = agent.Solve(problem) 
     answerInfo = ""
     if answer!=problem.correctAnswer and problem.correctAnswer>0:
@@ -407,6 +437,7 @@ def testAgentSolveChallenge(problemId):
     print("[%s] 结果 = %d  %s" % ( problem.name, answer,answerInfo))
 
 def testSolveProblemSet(setName:str):
+    startTime = time()
     problemSet = ProblemSet(setName)
     agent = Agent()
     totalProblems = 0
@@ -424,7 +455,7 @@ def testSolveProblemSet(setName:str):
         print("[%s] : 结果 = %d %s\n" % (problem.name, answer,answerInfo))
         totalProblems += 1
         #print("%s . %s : 结果 = %d %s\n" % (set.name, problem.name, answer,answerInfo))
-    print("[%s] %d/%d" %(setName,correctProblems,totalProblems))
+    print("[%s] %d/%d , 耗时=%f" %(setName,correctProblems,totalProblems,(time()-startTime)))
     
 def main():
     Agent._DEBUG = True
@@ -502,7 +533,9 @@ def main():
     #testIsImg2ElementsSwapped("C-09","AC")
 
     #testIsIncSameElements("Challenge B-01","AC")
+    #test_RotateImage("Challenge B-10","AB",2)
 
+    #testAgentSolve("B-05")
     #testAgentSolve("B-05")
     #testAgentSolve("B-10")
     #testAgentSolve("B-12")
@@ -527,6 +560,11 @@ def main():
     #testAgentSolve("E-02") #]前两图片像素合并==第三个图片
     #testAgentSolve("E-04") # 前两图片像素相减==第三个图片
     #testAgentSolve("C-06") #前两图片像素个数相加或减==第三个图片,且宽高匹配
+
+    testAgentSolve("Challenge B-07")  #  
+    #testAgentSolve("Challenge B-09")  #  [AB-C4] 两图片素个数变化率相差<0.05
+    #testAgentSolve("Challenge B-10")  #  
+    #testAgentSolve("Challenge E-01")  #
     
     #Challenge
     #testAgentSolveChallenge("B-01") 
@@ -537,16 +575,19 @@ def main():
     #testAgentSolveChallenge("D-11") 
 
     #tempTest()
+    #tempTest2("Challenge E-12","A")
+    #tempTest2("C-10","A")
+    #tempTest4ProblemSet("Basic Problems E")
 
     Agent._DEBUG = False
-    #testSolveProblemSet("Basic Problems B")
-    #testSolveProblemSet("Basic Problems C")
-    #testSolveProblemSet("Basic Problems D")
-    #testSolveProblemSet("Basic Problems E")
-    #testSolveProblemSet("Challenge Problems B")
-    #testSolveProblemSet("Challenge Problems C")
-    #testSolveProblemSet("Challenge Problems D")
-    testSolveProblemSet("Challenge Problems E")
+    #testSolveProblemSet("Basic Problems B")  # 2X2
+    #testSolveProblemSet("Basic Problems C") # 3X3
+    #testSolveProblemSet("Basic Problems D") # 3X3
+    #testSolveProblemSet("Basic Problems E") # 3X3
+    #testSolveProblemSet("Challenge Problems B")  # 2X2
+    #testSolveProblemSet("Challenge Problems C")  # 3X3
+    #testSolveProblemSet("Challenge Problems D")  # 3X3
+    #testSolveProblemSet("Challenge Problems E")  # 3X3
     return
 
     
@@ -569,7 +610,50 @@ def tempTest():
     print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
     #transInfo = img2.getImgElementTrans(0,"FLIPH")  # r similar,scale FLIPH FLIPV
     #print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
-        
+
+#loadProblemByID(problemId)
+def  tempTest2(problemId,imgId):
+    agent = prepareAgent(problemId)
+    #img2 = agent.getImages3(imgId)
+    img = agent.getImage1(imgId)
+    e = img.asImgElement()
+    print("e.blackPixelCount=%d, (%d,%d)-(%d,%d) %s"%(e.blackPixelCount,e.x0,e.y0,e.ex,e.ey, e.name))
+    e.update()
+    print("e.blackPixelCount=%d, (%d,%d)-(%d,%d)"%(e.blackPixelCount,e.x0,e.y0,e.ex,e.ey))
+
+
+def  tempTest3(problemId):        
+    agent = prepareAgent(problemId)
+
+#
+# problemSetId: 
+#
+def  tempTest4ProblemSet(problemSetId):        
+    problemSet = ProblemSet(problemSetId)
+    agent = Agent()
+    for problem in problemSet.problems: 
+        tempTest4Problem(problem)
+
+def  tempTest4Problem(problem):
+    agent = Agent()
+    agent.prepareProblem(problem)
+    for imgId in agent.imagesFrame:
+        if len(imgId)!=1:
+            continue
+        imgs1 = agent.getImageElements(imgId) # 旧版
+        imgs2 = agent.imagesFrame[imgId].getImageElements()  # 新 版
+        print("%s-%s : 元素个数 =%d, %d" %(problem.name,imgId,len(imgs1),len(imgs2)))
+        if len(imgs1)!=len(imgs2):
+            raise BaseException("len(imgs1)!=len(imgs2) : %d!=%d" %(len(imgs1),len(imgs2)))
+        i = 0
+        for i in range(len(imgs1)):
+            e1 = imgs1[i]
+            e2 = imgs2[i]
+            if e1.name!=e2.name or e1.blackPixelCount!=e2.blackPixelCount or e1.getTotalPixel()!=e2.getTotalPixel() or e1.x0!=e2.x0 or e1.y0!=e2.y0 or e1.ex!=e2.ex or e1.ey!=e2.ey :
+                raise BaseException("%s-%s : error " %(problem.name,imgId))
+            #print("%s-%s : %s %d/%d , %s %d/%d" %(problemId,imgId,e1.name,e1.blackPixelCount,e1.getTotalPixel(),e2.name,e2.blackPixelCount,e2.getTotalPixel()))
+            #printImageElement(e,problemId)
+
 
 if __name__ == "__main__":
     main()    
