@@ -318,11 +318,18 @@ def testImageTransInfo(problemId,imsgName):
         t,v1,v2 = transInfo.getImgElementTrans(i) 
         print("t=%s %f %f" %(t,v1,v2))  
         """
-    
+
+def getImageElement(agent:Agent,imgId:str,elementdx:int):
+    if len(imgId)>1 and imgId[1]=="-":
+        img = agent.getImageElements(imgId[0])[elementdx]
+        return img.getTransImage(imgId[2:])
+    return  agent.getImageElements(imgId)[elementdx]
 def testImageElementSimilarScale(problemId,imgId1,imgId2,elementdx1=0,elementdx2=0):
     agent = prepareAgent(problemId)    
-    img1 = agent.getImageElements(imgId1)[elementdx1]
-    img2 = agent.getImageElements(imgId2)[elementdx2]
+
+    img1 = getImageElement(agent,imgId1,elementdx1)
+    printImageElement(img1,problemId)
+    img2 = getImageElement(agent,imgId2,elementdx2)
     similar,scale = img1.getImageElementSimilarScale(img2)
     print("[%s] 中 %s.%d 与 %s.%d 相似 = %f, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar,scale))    
     #similar1,scale1 = img1.getImageElementSimilarScale(img2)
@@ -409,12 +416,25 @@ def test_allElementsInCenter3(problemId:str,img3Id:str)->None:
     y = img3.allElementsInCenterY()
     print("[%s] %s allElementsInCenter = x=%f,y=%f" %(problemId,img3Id,x,y) )
 
-def test_RotateImage(problemId:str,img2Id:str,rotaMode:int)->None:
+#
+# rotaMode IMGTRANSMODE_ROTATE1,IMGTRANSMODE_ROTATE2, IMGTRANSMODE_ROTATE3
+#   ROTAGE90, ROTAGE270
+#
+def test_RotateImage(problemId:str,img2Id:str,rotaMode:str)->None:
     agent = prepareAgent(problemId)          
     img = agent.getImages2(img2Id)
     #imgsFrm1.img1.getRotateImage(checkAllRota).isEquals(imgsFrm1.img2.asImgElement()) 
     img1 = img.img1.getRotateImage(rotaMode)
     printImageElement(img1,problemId)
+    print("[%s] %s : ImgElementTransMatched =%s" %(img2Id,rotaMode,img.isImgElementTransMatched(0,rotaMode)))
+    trans = img.getImgElementTrans(0,rotaMode)
+    print("[%s] %s :  matched=%s,similar=%s" %(img2Id,rotaMode,trans.matched,trans.similar))
+
+def test_getNotEqImgElementIdx(problemId:str,img3Id:str)->None:
+    agent = prepareAgent(problemId)          
+    img = agent.getImages3(img3Id)
+    print("NotEqImgElementIdx : ",img.getNotEqImgElementIdx())
+
 #
 #  D-04
 #    
@@ -437,6 +457,7 @@ def testAgentSolveChallenge(problemId):
     print("[%s] 结果 = %d  %s" % ( problem.name, answer,answerInfo))
 
 def testSolveProblemSet(setName:str):
+    print("SolveProblemSet [%s]"%setName)
     startTime = time()
     problemSet = ProblemSet(setName)
     agent = Agent()
@@ -490,7 +511,10 @@ def main():
     #testImageElementSimilarScale("C-02","A","G",1,1)  # 中 A.1 与 G.1 相似 = 1.000000, 比例 = 1.000000
     #testImageElementSimilarScale("C-11","A","B") # 两个小菱形  [C-11] 中 A 与 B 相似 = 1.000000, 比例 = 0.958333
     #testImageElementSimilarScale("B-03","A","B") #[B-03] 中 A 与 B 相似 = 0.000000, 比例 = 1.000000
+    #testImageElementSimilarScale("B-06","A-FLIPV","C")
     #testImageElementSimilarScale("Challenge B-01","A","C")
+    #testImageElementSimilarScale("Challenge D-02","B-ROTAGE270","C")
+    testImageElementSimilarScale("Challenge B-07","C-ROTAGE90","6")
 
     #testImageTransInfo("B-02","AB") # 相等图形 园+十字
     #testImageTransInfo("B-03","AB") # B-03 - AB]元素-0: 变换=FLIPH 相似度=1.000000 大小比例=1.000000 
@@ -534,6 +558,12 @@ def main():
 
     #testIsIncSameElements("Challenge B-01","AC")
     #test_RotateImage("Challenge B-10","AB",2)
+    #test_RotateImage("Challenge D-02","AB","ROTAGE270")
+    #test_RotateImage("Challenge D-02","BC","ROTAGE270")
+    #test_RotateImage("Challenge D-02","GH","ROTAGE270")
+    #test_RotateImage("Challenge D-02","H1","ROTAGE270")
+    #test_getNotEqImgElementIdx("D-06","ABC")
+    #test_getNotEqImgElementIdx("D-06","GH1")
 
     #testAgentSolve("B-05")
     #testAgentSolve("B-05")
@@ -553,6 +583,7 @@ def main():
     #testAgentSolve("D-03")
     #testAgentSolve("D-04")
     #testAgentSolve("D-06")
+    #testAgentSolve("D-08")
     #testAgentSolve("D-11") #[BFG-AE3]每组图形全相等
     #testAgentSolve("D-10") # 没有匹配到任何 条件
     #testAgentSolve("E-03") # 前两图片像素合并==第三个图片
@@ -561,21 +592,25 @@ def main():
     #testAgentSolve("E-04") # 前两图片像素相减==第三个图片
     #testAgentSolve("C-06") #前两图片像素个数相加或减==第三个图片,且宽高匹配
 
-    testAgentSolve("Challenge B-07")  #  
+    #testAgentSolve("Challenge B-07")  #  
     #testAgentSolve("Challenge B-09")  #  [AB-C4] 两图片素个数变化率相差<0.05
+    #testAgentSolve("Challenge B-06")   #  相等比较时, 斜线段 较多
+    #testAgentSolve("Challenge B-07")   #  相等比较时, 横线段 较多
     #testAgentSolve("Challenge B-10")  #  
+    #testAgentSolve("Challenge D-02")  #  
     #testAgentSolve("Challenge E-01")  #
     
     #Challenge
     #testAgentSolveChallenge("B-01") 
     #testAgentSolveChallenge("B-05") 
-    #testAgentSolveChallenge("B-06")   #  相等比较时, 线段 较多
     #testAgentSolveChallenge("C-02") 
     #testAgentSolveChallenge("D-04") #  旋转 90度 , 
     #testAgentSolveChallenge("D-11") 
 
     #tempTest()
     #tempTest2("Challenge E-12","A")
+    #tempTest1("C-10","C")
+    #tempTest1("Challenge B-01","C")
     #tempTest2("C-10","A")
     #tempTest4ProblemSet("Basic Problems E")
 
@@ -612,14 +647,15 @@ def tempTest():
     #print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
 
 #loadProblemByID(problemId)
-def  tempTest2(problemId,imgId):
+def  tempTest1(problemId,imgId):
     agent = prepareAgent(problemId)
     #img2 = agent.getImages3(imgId)
     img = agent.getImage1(imgId)
     e = img.asImgElement()
-    print("e.blackPixelCount=%d, (%d,%d)-(%d,%d) %s"%(e.blackPixelCount,e.x0,e.y0,e.ex,e.ey, e.name))
+    print("%s-%s : e.blackPixelCount=%d, (%d,%d)-(%d,%d) %s"%(problemId,imgId,e.blackPixelCount,e.x0,e.y0,e.ex,e.ey, e.name))
+    #printImageElement(e,problemId)
     e.update()
-    print("e.blackPixelCount=%d, (%d,%d)-(%d,%d)"%(e.blackPixelCount,e.x0,e.y0,e.ex,e.ey))
+    print("%s-%s : e.blackPixelCount=%d, (%d,%d)-(%d,%d)"%(problemId,imgId,e.blackPixelCount,e.x0,e.y0,e.ex,e.ey))
 
 
 def  tempTest3(problemId):        

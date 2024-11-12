@@ -200,10 +200,9 @@ class ImageElement:
         self.hLineSegs = {}  # 缓存 水平 线段
         self.vLineSegs = {} # 缓存 垂直 线段
         height, width = self.image.shape
-        for y in range(height):
-            for x in range(width):
-                if self.image[y,x]==0:
-                    self._forPixel(x,y)
+        for y,x in product(range(height), range(width)):
+            if self.image[y,x]==0:
+                self._forPixel(x,y)
     #def isBlack(self,x:int,y:int):
     #    return self.image[y,x]==0 if x>=0 and x<self.ex and y>=0 and y<self.ey else False
     def addPixel(self,x:int,y:int):
@@ -265,6 +264,9 @@ class ImageElement:
     def getEndPointY(self,x:int):
         return  endBlackPointY(self.image,x,self.y0,self.ey)
   
+    #
+    # y 横线上的 线段
+    #
     def getHLineSegments(self,y):
         if y in self.hLineSegs:
             #print("使用缓存")
@@ -272,6 +274,7 @@ class ImageElement:
         v = getHLineSegments(self.image,y,self.x0,self.ex)
         self.hLineSegs[y] = v
         return v
+    
     def getVLineSegments(self,x):
         if x in self.vLineSegs:
             #print("使用缓存")
@@ -279,6 +282,9 @@ class ImageElement:
         v = getVLineSegments(self.image,x,self.y0,self.ey)
         self.vLineSegs[x] = v
         return v
+    
+    def getHLine(self,y):
+        pass
     #
     #
     """
@@ -341,12 +347,23 @@ class ImageElement:
         smallH,smallW = smallElement.getSize()  
         largeScaleH = largeH /  smallH
         largeScaleW = largeW /  smallW
+
+        
+        similarH,matchedH,totalLinesH = ImageElement.checkImageElementHWSimilar(smallElement,largeElement,largeScaleW,largeScaleH,0) # 水平线相似度
+        if similarH<0.7:
+            return 0,scale
+        similarV,matchedV,totalLinesV = ImageElement.checkImageElementHWSimilar(smallElement,largeElement,largeScaleW,largeScaleH,1) # 垂直线相似度
+        #print("matchedH/totalLinesH=%d/%d,matchedV/totalLinesV=%d/%d" %(matchedH,totalLinesH,matchedV,totalLinesV))
+        similar =  (similarH+similarV)/2
+        ImageElement.cached[cacheKey] = (similar,scale)
+        return  similar, scale
+        
         comSampleCount = 50    
         #
         # 水平方法抽取 50 个样本 线段
         # 垂直方法抽取 50 个样本 线段
         #  计算这些字段 相似度
-        # ( 不检测所有点 只是 为了效率) 
+        # ( 不检测所有点 只是 为了效率 ) 
         # 
         #dy = smallElement
         hlinesY = ImageElement.getSamplePointForImgSimilarDetect(smallElement.y0,smallElement.ey,comSampleCount)
@@ -378,11 +395,50 @@ class ImageElement:
                 #print("i=%d matchedLines/totalLines : %d/%d = %f" %(i,matchedLines,totalLines,matchedLines/totalLines))
                 ImageElement.cached[cacheKey] = (0,scale)
                 return 0,scale
-        #if Agent._DEBUG:    
-        #    print("matchedLines/totalLines  = %d/%d" %(matchedLines,totalLines ))   
+        if Agent._DEBUG:    
+            print("matchedLines/totalLines  = %d/%d" %(matchedLines,totalLines ))   
         ImageElement.cached[cacheKey] = (matchedLines/totalLines,scale) 
         return matchedLines/totalLines ,scale      
+    CheckSampleLineCount = 50    
     
+    #
+    #  检测 水平 或 垂直方向 的 相似度
+    #   scale : hvType==0 时 水平 或 垂直 的 
+    #
+    def checkImageElementHWSimilar(smallElement,largeElement,largeScaleW:float,largeScaleH:float,hvType:int):
+        testSampleCount = 50    
+        if hvType==0: # 水平线
+            lines = ImageElement.getSamplePointForImgSimilarDetect(smallElement.y0,smallElement.ey,testSampleCount)
+        else: #垂直线
+            lines = ImageElement.getSamplePointForImgSimilarDetect(smallElement.x0,smallElement.ex,testSampleCount)
+        totalLines = 0     # 总 检测的 线段 数
+        matchedLines = 0   # 其中 匹配的 线段数    
+        for i in  range(len(lines)):
+            if hvType==0: # 水平线
+                y1 = lines[i]  #
+                y2 = largeElement.y0+int((y1-smallElement.y0)*largeScaleH+0.5)
+                matched = ImageElement.isImageElementLineSegmentSimilar(smallElement,largeElement,y1,y2,largeScaleW,0)
+            else:
+                x1 = lines[i]  #
+                x2 = largeElement.x0+int((x1-smallElement.x0)*largeScaleW+0.5)
+                matched = ImageElement.isImageElementLineSegmentSimilar(smallElement,largeElement,x1,x2,largeScaleH,1)
+            totalLines += 1
+            if matched:
+                matchedLines += 1
+            if (i==10 and matchedLines/totalLines < 0.5) or (i==10 and matchedLines/totalLines < 0.7):
+                break
+        matchedRatio =  matchedLines/totalLines
+        if matchedRatio<0.9:
+            #print("matchedLines/totalLines = %d/%d = %f" %(matchedLines,totalLines,matchedRatio))
+            # Challenge Problem B-07 : "C-ROTAGE90","6" 比较 无法使用线段比较 , 使用 像素 比较:
+            #largeElement.blackPixelCount / smallElement.blackPixelCount
+            #
+            countBlackPixs = [0,0,0,0,0,0,0,0]
+            nParts = len(countBlackPixs)  # 将图片分为 八端
+            
+            pass 
+        return matchedRatio,matchedLines,totalLines
+        
     #
     #  @param hvType :0 水平线, 1:垂直线
     #   scale 是 imageElement2 / imageElement1 的 图形放缩比例
@@ -449,6 +505,7 @@ class ImageElement:
                 #    print("isLineSegmentsContainsIn fail")    
             #print(lineSegments1, lineSegments2)
             return False
+        
         for lineSeg1,lineSeg2 in zip(lineSegments1,lineSegments2):
             x1_start,x1_end = lineSeg1
             x2_start,x2_end = lineSeg2
@@ -587,68 +644,82 @@ class ImageElement:
         #print("%s-%s : similar=%f" %(self.name,otherImgElement.name,similar))
         return similar>=similarTh
 
-    def getFlipedImage(self,flipMode:int):
-        imgKey = IMGTRANSMODE_FLIPVH if flipMode==-1 else ( IMGTRANSMODE_FLIPV if flipMode==0 else IMGTRANSMODE_FLIPH )
-        if imgKey in self.transformImgs:
+    def getTransImage(self,transMode:str):
+        if transMode==IMGTRANSMODE_FLIPV or transMode==IMGTRANSMODE_FLIPH or transMode==IMGTRANSMODE_FLIPVH :
+            return self.getFlipedImage(transMode)
+        if transMode==IMGTRANSMODE_ROTATE1 or transMode==IMGTRANSMODE_ROTATE2 or transMode==IMGTRANSMODE_ROTATE3:    
+            return self.getRotateImage(transMode)
+        if transMode==IMGTRANSMODE_FILLED:
+            return self.getFilledImage()
+        raise BaseException("getTransImage: invalid transMode = ",transMode)
+    #
+    #
+    #
+    def getFlipedImage(self,flipMode:str):
+        if flipMode in self.transformImgs:
             #print("使用缓存图片...")
-            return self.transformImgs.get(imgKey)
-        imgElement = ImageElement(self.image.shape,self.name+"-"+imgKey)
+            return self.transformImgs.get(flipMode)
+        imgElement = ImageElement(self.image.shape,self.name+"-"+flipMode)
         img = imgElement.image #np.full(self.image.shape, 255, np.uint8)
         imgRegion = self.image[self.y0:self.ey, self.x0:self.ex]
-        imgRegion = cv2.flip(imgRegion,flipMode ) 
+        imgRegion = cv2.flip(imgRegion,getCVFlipMode(flipMode) ) 
         img[self.y0:self.ey, self.x0:self.ex] = imgRegion
         imgElement.update()
-        self.transformImgs[imgKey] = imgElement
+        self.transformImgs[flipMode] = imgElement
         return imgElement
     
-    def getWholeFlipedImage(self,flipMode:int):
-        imgKey = IMGTRANSMODE_WHOLEFLIPVH if flipMode==-1 else ( IMGTRANSMODE_WHOLEFLIPV if flipMode==0 else IMGTRANSMODE_WHOLEFLIPH )
-        if imgKey in self.transformImgs:
+    #
+    # flipMode IMGTRANSMODE_WHOLEFLIPV
+    #
+    """
+    def getWholeFlipedImage(self,flipMode:str):
+        #imgKey = IMGTRANSMODE_WHOLEFLIPVH if flipMode==-1 else ( IMGTRANSMODE_WHOLEFLIPV if flipMode==0 else IMGTRANSMODE_WHOLEFLIPH )
+        if flipMode in self.transformImgs:
             #print("使用缓存图片...")
-            return self.transformImgs.get(imgKey)
-        imgElement = ImageElement(None,self.name+"-"+imgKey)
+            return self.transformImgs.get(flipMode)
+        imgElement = ImageElement(None,self.name+"-"+flipMode)
         imgElement.image = cv2.flip(self.image,flipMode ) 
         imgElement.update()
-        self.transformImgs[imgKey] = imgElement
+        self.transformImgs[flipMode] = imgElement
         return imgElement
-    
+    """
+
     #
     # get
     #
-    def  getWholeFlipedCenterPoint(self,flipMode:int):
+    def  getWholeFlipedCenterPoint(self,flipMode:str|int):
         height,width = self.image.shape
         wholeX0,wholeY0  = width/2,height/2
         x0,y0 = (self.x0+self.ex)/2,(self.y0+self.ey)/2
         x1,y1 = x0-wholeX0, y0-wholeY0
-        if flipMode==-1 : 
+        if flipMode==IMGTRANSMODE_FLIPVH or flipMode==-1 : # -1 : 
             x1 = -x1
             y1 = -y1
-        elif flipMode==0 : # 垂直翻转(上下)
+        elif flipMode==IMGTRANSMODE_FLIPV or flipMode==0 : # 垂直翻转(上下)
             y1 = -y1
-        elif flipMode==1 : # 水平翻转 ( 左右 )
+        elif flipMode==IMGTRANSMODE_FLIPH or flipMode==1 : # 水平翻转 ( 左右 )
             x1 = -x1
+        else:
+            raise("flipMode=",flipMode)    
         return  int(x1+wholeX0+0.5),int(y1+wholeY0+0.5)
 
-
+    #def 
     
-    def getRotateImage(self,rotaMode:int):
+    def getRotateImage(self,rotaMode:str):
         #print("rotaMode=",rotaMode )
-        if rotaMode==1:
-            imgKey = IMGTRANSMODE_ROTATE1
+        if rotaMode==IMGTRANSMODE_ROTATE1:
             rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE # ROTATE_90_CLOCKWISE #rotaMode*90
-        elif rotaMode==2:
-            imgKey = IMGTRANSMODE_ROTATE2
+        elif rotaMode==IMGTRANSMODE_ROTATE2:
             rotateCode = cv2.ROTATE_180
-        elif rotaMode==3:
-            imgKey = IMGTRANSMODE_ROTATE3
+        elif rotaMode==IMGTRANSMODE_ROTATE3:
             rotateCode = cv2.ROTATE_90_CLOCKWISE
         else:
             raise BaseException("Invalid rotaMode=%d" % rotaMode)
-        if imgKey in self.transformImgs:
+        if rotaMode in self.transformImgs:
             #print("使用缓存图片...")
-            return self.transformImgs.get(imgKey)
+            return self.transformImgs.get(rotaMode)
         #print("rotateCode = %d"% rotateCode)
-        imgElement = ImageElement(self.image.shape,self.name+"-"+imgKey)
+        imgElement = ImageElement(self.image.shape,self.name+"-"+rotaMode)
         img = imgElement.image # np.full(self.image.shape, 255, np.uint8)
         if rotateCode==cv2.ROTATE_180 or (self.ex-self.x0)==(self.ey-self.y0) :
             imgRegion = self.image[self.y0:self.ey, self.x0:self.ex]
@@ -690,7 +761,7 @@ class ImageElement:
                 #CV2Utils.printImage2(imgRegion)
                 img[cy-r:cy+r,cx-r:cx+r] = imgRegion
         imgElement.update()    
-        self.transformImgs[imgKey] = imgElement
+        self.transformImgs[rotaMode] = imgElement
         return imgElement
     
     def getFilledImage(self):
@@ -958,27 +1029,15 @@ class Image1:
             self._asImgElement.y0 = 0
             self._asImgElement.ex = 0
             self._asImgElement.ey = 0
-            return lf._asImgElement    
-
-        for e in elements:
-            self._asImgElement.blackPixelCount += e.blackPixelCount
-            if e==elements[0]:
-                self._asImgElement.x0 = e.x0
-                self._asImgElement.y0 = e.y0
-                self._asImgElement.ex = e.ex
-                self._asImgElement.ey = e.ey
-            else:
-                if self._asImgElement.x0>e.x0:
-                   self._asImgElement.x0 = e.x0     
-                if self._asImgElement.y0>e.y0:
-                   self._asImgElement.y0 = e.y0     
-                if self._asImgElement.ex<e.ex:
-                    self._asImgElement.ex = e.ex     
-                if self._asImgElement.ey<e.ey:
-                    self._asImgElement.ey = e.ey     
-        return self._asImgElement        
+        else:
+            self._asImgElement.blackPixelCount = sum(map(lambda e:e.blackPixelCount,elements))
+            self._asImgElement.x0 = min(map(lambda e:e.x0,elements))
+            self._asImgElement.y0 = min(map(lambda e:e.y0,elements))
+            self._asImgElement.ex = max(map(lambda e:e.ex,elements))
+            self._asImgElement.ey = max(map(lambda e:e.ey,elements))
+        return self._asImgElement    
     
-    def getRotateImage(self,rotaMode:int):
+    def getRotateImage(self,rotaMode:str):
         return self.asImgElement().getRotateImage(rotaMode)
     
     #
@@ -1011,23 +1070,22 @@ class Image1:
             if width>w:
                 width = w
 
-        for y in range(height):
-            for x in range(width):
-                v1 = False
-                v2 = False
-                for img in images1Lst:
-                    if img.image[y,x]==0:
-                        v1 = True
-                        break
-                for img in images2Lst:
-                    if img.image[y,x]==0:
-                        v2 = True
-                        break
-                if v1!=v2:
-                    count += 1  
-                    blackCount += 1
-                elif v1:
-                    blackCount += 1
+        for y,x in product(range(height), range(width)):
+            v1 = False
+            v2 = False
+            for img in images1Lst:
+                if img.image[y,x]==0:
+                    v1 = True
+                    break
+            for img in images2Lst:
+                if img.image[y,x]==0:
+                    v2 = True
+                    break
+            if v1!=v2:
+                count += 1  
+                blackCount += 1
+            elif v1:
+                blackCount += 1
         Image1.cached[cacheKey] = (count ,blackCount, height*width)            
         return Image1.cached[cacheKey] #count ,blackCount, height*width 
 
@@ -1046,19 +1104,18 @@ class Image1:
             if width>w:
                 width = w
         image = np.full((height, width), 255, np.uint8)  #        
-        for y in range(height):
-            for x in range(width):
-                v = False
-                hasBlack = False
-                for img in imagesLst:
-                    if img.image[y,x]==0 :
-                        v = not v
-                        hasBlack = True
-                if v:
-                    count += 1
-                    image[y,x] = 0
-                if hasBlack:
-                    blackCount += 1    
+        for y,x in product(range(height), range(width)):
+            v = False
+            hasBlack = False
+            for img in imagesLst:
+                if img.image[y,x]==0 :
+                    v = not v
+                    hasBlack = True
+            if v:
+                count += 1
+                image[y,x] = 0
+            if hasBlack:
+                blackCount += 1    
         Image1.cached[cacheKey] = (count ,blackCount, height*width ,image)             
         return Image1.cached[cacheKey] #count ,blackCount, height*width ,image
 
@@ -1103,35 +1160,26 @@ IMGTRANSMODE_FLIPV = "FLIPV"  #   (以元素为中心)垂直翻转(上下)  flip
 IMGTRANSMODE_FLIPH = "FLIPH"  #   (以元素为中心)水平翻转 ( 左右 ) flipMode==1
 IMGTRANSMODE_FLIPVH = "FLIPVH"  #   (以元素为中心)水平翻转 ( 左右 ) flipMode==-1
 
-IMGTRANSMODE_WHOLEFLIPV = "WHOLEFLIPV"  #   (以整个图为中心)垂直翻转(上下)  flipMode==0
-IMGTRANSMODE_WHOLEFLIPH = "WHOLEFLIPH"  #   (以整个图为中心)水平翻转 ( 左右 ) flipMode==1
-IMGTRANSMODE_WHOLEFLIPVH = "WHOLEFLIPVH"  #   (以整个图为中心)水平翻转 ( 左右 ) flipMode==-1
+#IMGTRANSMODE_WHOLEFLIPV = "WHOLEFLIPV"  #   (以整个图为中心)垂直翻转(上下)  flipMode==0
+#IMGTRANSMODE_WHOLEFLIPH = "WHOLEFLIPH"  #   (以整个图为中心)水平翻转 ( 左右 ) flipMode==1
+#IMGTRANSMODE_WHOLEFLIPVH = "WHOLEFLIPVH"  #   (以整个图为中心)水平翻转 ( 左右 ) flipMode==-1
 
-IMGTRANSMODE_ROTATE1 = "ROTAGE90" #  旋转 90度
-IMGTRANSMODE_ROTATE2 = "ROTAGE180" #  旋转 180度
-IMGTRANSMODE_ROTATE3 = "ROTAGE270" #  旋转 270度(-90度)  
+IMGTRANSMODE_ROTATE1 = "ROTAGE90" #  逆时针 旋转 90度
+IMGTRANSMODE_ROTATE2 = "ROTAGE180" #   旋转 180度
+IMGTRANSMODE_ROTATE3 = "ROTAGE270" #  逆时针 旋转 270度(-90度)  
 IMGTRANSMODE_FILLED = "FILLED"
 IMGTRANSMODE_UNFILLED = "UNFILLED"
 IMGTRANSMODE_SIMILAR = "SIMILAR"
 
-# ImageElement.getFlipTransMode
-def getFlipTransMode(flipMode:int)->str:
-    if flipMode==0:
-        return  IMGTRANSMODE_FLIPV
-    if flipMode==1:
-        return  IMGTRANSMODE_FLIPH
-    if flipMode==-1:
-        return  IMGTRANSMODE_FLIPVH
-    raise BaseException("Invalid flipMode=%d" % flipMode)
 
-def getFlipModeModeByTransMode(flipTransMode:str)->int:
+def getCVFlipMode(flipTransMode)->int:
     if flipTransMode==IMGTRANSMODE_FLIPV:
         return 0
     if flipTransMode==IMGTRANSMODE_FLIPH:
         return 1
     if flipTransMode==IMGTRANSMODE_FLIPVH:
         return -1
-    return -2
+    raise BaseException("Invalid flipTransMode=" , flipTransMode)
 
 #IMGTRANSMODE_ADDED = 11
 #IMGTRANSMODE_REMOVED = 12
@@ -1236,6 +1284,11 @@ class Images2:
         return cacheTrans[transMode]
         #return cacheTrans
        
+    #
+    #  
+    # Challenge D-02","BC","ROTAGE270" : B-ROTAGE270 与 C 相似度:  0.899999
+    #
+    SimilarMatchedThreshold = 0.85   
 #
 #  判断 两个图形元素之间 的 变换规则, 
 # 即: 图形元素 dstImgElement 是否 能由 srcImfElement 经过 转换获得
@@ -1253,36 +1306,30 @@ class Images2:
             return ImageElementTrans(transMode,similar>=0.85,similar,scale)
         if transMode==IMGTRANSMODE_FLIPV or transMode==IMGTRANSMODE_FLIPH or transMode==IMGTRANSMODE_FLIPVH:
             if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
-                flipMode = 0 if transMode==IMGTRANSMODE_FLIPV else ( 1 if transMode==IMGTRANSMODE_FLIPH else -1)
-                similar,scale = srcImgElement.getFlipedImage(flipMode).getImageElementSimilarScale(dstImgElement)
+                #flipMode = 0 if transMode==IMGTRANSMODE_FLIPV else ( 1 if transMode==IMGTRANSMODE_FLIPH else -1)
+                similar,scale = srcImgElement.getFlipedImage(transMode).getImageElementSimilarScale(dstImgElement)
                 #print("flipTransMode=%s : 相似度=%f 比例=%f" %(flipTransMode,similar,scale))
-                return  ImageElementTrans(transMode,similar>=0.90,similar,scale)    
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,scale)    
             return  ImageElementTrans(transMode,False,0,0)
         if transMode==IMGTRANSMODE_FILLED:    
             if srcImgElement.getBlackPixelRatio()<0.3 and dstImgElement.getBlackPixelRatio()>0.4:
                 similar,scale = srcImgElement.getFilledImage().getImageElementSimilarScale(dstImgElement)
                 #print("FILLED: 相似度=%f 比例=%f" %(similar,scale))
-                return  ImageElementTrans(transMode,similar>=0.90,similar,scale)    
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,scale)    
             return  ImageElementTrans(transMode,False,0,0)
         if transMode==IMGTRANSMODE_UNFILLED:    
             if srcImgElement.getBlackPixelRatio()>0.4 and dstImgElement.getBlackPixelRatio()<0.3:
                 similar,scale = dstImgElement.getFilledImage().getImageElementSimilarScale(srcImgElement)
-                return  ImageElementTrans(transMode,similar>=0.90,similar,scale)    
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,scale)    
             return  ImageElementTrans(transMode,False,0,0)
 
         if transMode==IMGTRANSMODE_ROTATE1 or transMode==IMGTRANSMODE_ROTATE2 or transMode==IMGTRANSMODE_ROTATE3:
-            if  transMode==IMGTRANSMODE_ROTATE1:
-                rotateMode = 1
-            elif transMode==IMGTRANSMODE_ROTATE2:
-                rotateMode = 2
-            elif transMode==IMGTRANSMODE_ROTATE3:
-                rotateMode = 3
             if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
-                rotateImg = srcImgElement.getRotateImage(rotateMode)
+                rotateImg = srcImgElement.getRotateImage(transMode)
                 if rotateImg==None:
                     return ImageElementTrans(transMode,False,0,0)
                 similar,scale = rotateImg.getImageElementSimilarScale(dstImgElement)
-                return  ImageElementTrans(transMode,similar>=0.90,similar,scale)  
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,scale)  
             return  ImageElementTrans(transMode,False,0,0)
 
 
@@ -1298,10 +1345,10 @@ class Images2:
     def isWholemgElementFliped(self,elementIdx:int,flipTransMode:str)->bool:
         if not self.isImgElementTransMatched(elementIdx,flipTransMode):
             return False
-        flipMode = getFlipModeModeByTransMode(flipTransMode)
+        #flipMode = getFlipModeModeByTransMode(flipTransMode)
         img1 = self.img1Elements[elementIdx]
         img2 = self.img2Elements[elementIdx]
-        x1,y1 = img1.getWholeFlipedCenterPoint(flipMode) # A 图 (基于整图)翻转后的 中心点 
+        x1,y1 = img1.getWholeFlipedCenterPoint(flipTransMode) # A 图 (基于整图)翻转后的 中心点 
         x2,y2 = img2.getCenter() # B 图  中心点 
         #print("%s图(基于整图)翻转后的 中心点 = (%f,%f) , %s图中心点 =  (%f,%f) " %(imgs1Name[0:1],xA0,yA0,imgs1Name[1:2],xB0,yB0))
         return abs(x1-x2)<3 and abs(y1-y2)<3
@@ -1614,7 +1661,7 @@ class Agent:
     # @param imgs1Name,imgs2Name:  一行 或 一列 或 对角线 的 两个图 ,如 "AB","AC", "C1" ,"B1" 等
     # @param scoreAddTo 得分结果 累加到 scoreAddTo 中
     #    
-    def calculateImages2MatchScore(self,imgs1Name,imgs2Name,scoreAddTo:AnswerScore,scoreWeight=1): 
+    def calculateImages2MatchScore(self,imgs1Name,imgs2Name,scoreAddTo:AnswerScore,scoreWeight=1,for3X3=False): 
         imgsFrm1 = self.getImages2(imgs1Name)
         imgsFrm2 = self.getImages2(imgs2Name)
         elementCountDiff1 = imgsFrm1.getImgElementsCountDiff()  # count(B) - count(A)
@@ -1685,20 +1732,24 @@ class Agent:
         # Challenge Problem B-10 : 如果 整图 旋转  AB/C4 
         #
         if elementCountDiff1==elementCountDiff2  and elementCountDiff1==0 and imgsFrm1.getImgElementCount()==imgsFrm2.getImgElementCount() and minElementCount>1:
-            checkAllRota = -1
-            for rotaMode, transMode in zip([1,2,3], [IMGTRANSMODE_ROTATE1,IMGTRANSMODE_ROTATE2,IMGTRANSMODE_ROTATE3]):
+            checkAllRota = None
+            for transMode in [IMGTRANSMODE_ROTATE1,IMGTRANSMODE_ROTATE2,IMGTRANSMODE_ROTATE3]:
                 allEleMatched = True
                 for elementIdx in range( minElementCount ):
                     if transMode not in allElementsMatchedTransMode[elementIdx]:
                         allEleMatched = False
                         break
                 if allEleMatched:
-                    checkAllRota = rotaMode
+                    checkAllRota = transMode
                     break    
-            if checkAllRota>0:
+            if checkAllRota!=None:
                 #print("检查 %s/%s 是否满足整体旋转 %d ..." %(imgs1Name,imgs2Name,checkAllRota))        
                 if imgsFrm1.img1.getRotateImage(checkAllRota).isEquals(imgsFrm1.img2.asImgElement()) and imgsFrm2.img1.getRotateImage(checkAllRota).isEquals(imgsFrm2.img2.asImgElement()):
                     scoreAddTo.addScore(3*scoreWeight,imgs1Name,imgs2Name,"整图旋转")
+
+        if for3X3:
+            return
+                            
         #
         # 考虑 元素 增加 / 减少 的规则:
         #        
@@ -1829,11 +1880,15 @@ class Agent:
             #
             # D-06 : 比较最后一个元素 的,  ABC - GH1
             #
+            #print("%s/%s nElementIfSame1=%d,nElementIfSame2=%d" %(imgs1Name,imgs2Name,nElementIfSame1,nElementIfSame2))
             if nElementIfSame1>0 and nElementIfSame2>0:
                 i1 = imgsFrm1.getNotEqImgElementIdx()
+                #print("%s/%s i1=%d" %(imgs1Name,imgs2Name,i1))
                 if i1>=0  :
                     i2=imgsFrm2.getNotEqImgElementIdx()
+                    #print("%s/%s i2=%d" %(imgs1Name,imgs2Name,i2))
                     if i2>0:
+                        #print("%s/%s i1=%d,i2=%d" %(imgs1Name,imgs2Name,i1,i2))
                         if ImageElement.isElementsEqualsIgnoreOrder([imgsFrm1.img1Elements[i1],imgsFrm1.img2Elements[i1],imgsFrm1.img3Elements[i1]],[imgsFrm2.img1Elements[i2],imgsFrm2.img2Elements[i2],imgsFrm2.img3Elements[i2]]):
                             scoreAddTo.addScore(4 * scoreWeight ,imgs1Name,imgs2Name,"第一组的第%d元素与第二组的第%d元素相同组合" %(i1,i2))
                             pass
@@ -1883,20 +1938,22 @@ class Agent:
             
             #print("%s : elementsCount = %d/%d " % (imgsAB.name,len(imgsAB.img1Elements),len(imgsAB.img2Elements)))
             
+            scoreFac = 1/nElementIfSame
             for i in range(nElementIfSame):
-                if imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) \
+                # 逆时针
+                if    imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) \
                   and self.getImages2(imgs1Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) \
                   and self.getImages2(imgs2Name[0:2]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) \
                   and self.getImages2(imgs2Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) :
-                    scoreAddTo.addScore( 10* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为90度旋转关系")
+                    scoreAddTo.addScore( 10*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为90度旋转关系")
                     caseAddOrSubEq = False
                     caseXorEq = False
                     continue
-                if imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
+                if   imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
                   and self.getImages2(imgs1Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
                   and self.getImages2(imgs2Name[0:2]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
                   and self.getImages2(imgs2Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) :
-                    scoreAddTo.addScore( 10* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为-90度旋转关系")
+                    scoreAddTo.addScore( 10*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为-90度旋转关系")
                     caseAddOrSubEq = False
                     caseXorEq = False
                     continue
@@ -1906,7 +1963,8 @@ class Agent:
                     caseAddOrSubEq = False
                     caseXorEq = False
                     if imgsAB.isBlackPixelRatioEquals(i) and self.getImages2(imgs2Name[0:2]).isBlackPixelRatioEquals(i) : # todo 需要判断 满足 45 度的旋转 ,暂时 使用 isBlackPixelRatioEquals 代替
-                        scoreAddTo.addScore( 10* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为45度旋转关系")
+                        # Challenge D-02 :  [CDH-AE2]两组图形为45度旋转关系 : 判断错误, 暂时 降为 4 分
+                        scoreAddTo.addScore( 4*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为45度旋转关系")
                     continue
                 #elif imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) 
         # END if nElementIfSame>0: #六个 图形 具有 相同 元素 个数
@@ -1916,7 +1974,7 @@ class Agent:
             #imgsAI = self.getImages2(imgs1Name[0]+imgs2Name[2])
             #print("all6ImgEquals=%s, nElementIfSame=%d" %(all6ImgEquals,nElementIfSame))
             #print("检查 %s 与 %s ..." %(imgs1Name[0]+imgs1Name[2],imgs2Name[0]+imgs2Name[2]))
-            self.calculateImages2MatchScore(imgs1Name[0]+imgs1Name[2],imgs2Name[0]+imgs2Name[2],scoreAddTo,0.2)
+            self.calculateImages2MatchScore(imgs1Name[0]+imgs1Name[2],imgs2Name[0]+imgs2Name[2],scoreAddTo,0.2,True)
         # C-07 
 
 
