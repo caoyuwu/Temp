@@ -303,11 +303,12 @@ def testImageTransInfo(problemId,imsgName):
     #AC = agent.getImageTransInfo(srcImgId,dstImgId)
     #print("AC = ",AC)    
     img2 = agent.getImages2(imsgName) # ImageTransformInfo
+    transModeLst = ["EQUALS","FLIPV","FLIPH","FILLED","UNFILLED"]
     for i in range(img2.getImgElementCount()):
-        transInfo = img2.getAllImgElementTrans(i)  # ImageElementTrans[]
+        transInfo = img2.getAllImgElementTrans(i,transModeLst)  # ImageElementTrans[]
         for transVal in transInfo:  
-            if transVal.matched:
-                print("[%s - %s]元素-%d: 变换=%s 相似度=%f 大小比例=%f " % (problemId,imsgName,i,transVal.transMode,transVal.similar,transVal.scale))
+            #if transVal.matched or transVal.matched2:
+            print("[%s - %s]元素-%d: 变换=%s 相似度=%f,%f 大小比例=%f " % (problemId,imsgName,i,transVal.transMode,transVal.similar,transVal.similar2,transVal.scale))
         """
         t,v1,v2 = transInfo.getImgElementTrans(i,"FILLED") 
         print("t=%s %f %f" %(t,v1,v2)) 
@@ -330,8 +331,8 @@ def testImageElementSimilarScale(problemId,imgId1,imgId2,elementdx1=0,elementdx2
     img1 = getImageElement(agent,imgId1,elementdx1)
     printImageElement(img1,problemId)
     img2 = getImageElement(agent,imgId2,elementdx2)
-    similar,scale = img1.getImageElementSimilarScale(img2)
-    print("[%s] 中 %s.%d 与 %s.%d 相似 = %f, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar,scale))    
+    similar,similar2,scale = img1.getImageElementSimilarScale(img2)
+    print("[%s] 中 %s.%d 与 %s.%d 相似 = %f %f, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar,similar2,scale))    
     #similar1,scale1 = img1.getImageElementSimilarScale(img2)
     #print("[%s] 中 %s.%d 与 %s.%d 相似 = %f, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar1,scale1))   
     #similar1,scale1 = img1.getImageElementSimilarScale(img2)
@@ -513,8 +514,10 @@ def main():
     #testImageElementSimilarScale("B-03","A","B") #[B-03] 中 A 与 B 相似 = 0.000000, 比例 = 1.000000
     #testImageElementSimilarScale("B-06","A-FLIPV","C")
     #testImageElementSimilarScale("Challenge B-01","A","C")
+    #testImageElementSimilarScale("Challenge B-03","A","B")
     #testImageElementSimilarScale("Challenge D-02","B-ROTAGE270","C")
-    testImageElementSimilarScale("Challenge B-07","C-ROTAGE90","6")
+    #testImageElementSimilarScale("Challenge B-07","C-ROTAGE90","6")
+    #testImageElementSimilarScale("Challenge B-07","C-FLIPH","6")
 
     #testImageTransInfo("B-02","AB") # 相等图形 园+十字
     #testImageTransInfo("B-03","AB") # B-03 - AB]元素-0: 变换=FLIPH 相似度=1.000000 大小比例=1.000000 
@@ -530,6 +533,7 @@ def main():
     #testImageTransInfo("B-09","AB") #[B-09 - AB]元素-0: 变换=FILLED 相似度=1.000000 大小比例=1.047363 
     #testImageTransInfo("B-09","BA")  #[B-09 - BA]元素-0: 变换=UNFILLED 相似度=1.000000 大小比例=1.047363 
     #testImageTransInfo("C-05","BD") # 三个相等
+    #testImageTransInfo("Challenge B-07","AB") # 三个相等
     
     #testCalculaImages2MatchScore("B-01","AB","C1")  #[B-01] : AB - C1 得分 = 3
     #testCalculaImages2MatchScore("B-01","AB","C2")  #[B-01] : AB - C2 得分 = 13
@@ -567,6 +571,7 @@ def main():
 
     #testAgentSolve("B-05")
     #testAgentSolve("B-05")
+    #testAgentSolve("B-06")
     #testAgentSolve("B-10")
     #testAgentSolve("B-12")
     #testAgentSolve("B-01")
@@ -592,10 +597,13 @@ def main():
     #testAgentSolve("E-04") # 前两图片像素相减==第三个图片
     #testAgentSolve("C-06") #前两图片像素个数相加或减==第三个图片,且宽高匹配
 
+    #testAgentSolve("Challenge B-03") # 两组元素增减个数相同
+    testAgentSolve("Challenge B-04")
     #testAgentSolve("Challenge B-07")  #  
     #testAgentSolve("Challenge B-09")  #  [AB-C4] 两图片素个数变化率相差<0.05
     #testAgentSolve("Challenge B-06")   #  相等比较时, 斜线段 较多
-    #testAgentSolve("Challenge B-07")   #  相等比较时, 横线段 较多
+    #testAgentSolve("Challenge B-07")   #  相等比较时,  需要考虑 match2 轮廓相似:[AB-C6]元素0匹配相同变换FLIPH(仅轮廓相似)
+    #testAgentSolve("Challenge B-08")   #  顶点 规律
     #testAgentSolve("Challenge B-10")  #  
     #testAgentSolve("Challenge D-02")  #  
     #testAgentSolve("Challenge E-01")  #

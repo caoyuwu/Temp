@@ -313,7 +313,7 @@ class ImageElement:
         return abs(self.getBlackPixelRatio()-otherImgElement.getBlackPixelRatio()) <= ratioThreadhold;
     #
     #  图形 轮廓的 相似度
-    #  返回   (图1 与  图2 的 相似度(0-1.0), 图1/图2 图形大小比例)
+    #  返回   (图1 与  图2 的 相似度(0-1.0),  图1/图2 图形大小比例)
     #
     def getImageElementSimilarScale(self,otherImgElement):
         #cached
@@ -329,8 +329,8 @@ class ImageElement:
             #    h1,w1 = self.getSize()
             #    h2,w2 = otherImgElement.getSize()
             #    print("scaleH=%f,scaleW=%f 图1(h=%d,w=%d),图2(h=%d,w=%d)" %(scale,w1 /  w2,h1,w1,h2,w2))
-            ImageElement.cached[cacheKey] = (0,0)
-            return 0 ,0
+            ImageElement.cached[cacheKey] = (0,0,0)
+            return ImageElement.cached[cacheKey]
         #h1,w1 = self.getSize()
         #h2,w2 = otherImgElement.getSize()
         #scale = (h1*w1) / (h2*w2)   # 图1 与  图2 的 比率
@@ -349,63 +349,33 @@ class ImageElement:
         largeScaleW = largeW /  smallW
 
         
-        similarH,matchedH,totalLinesH = ImageElement.checkImageElementHWSimilar(smallElement,largeElement,largeScaleW,largeScaleH,0) # 水平线相似度
-        if similarH<0.7:
-            return 0,scale
-        similarV,matchedV,totalLinesV = ImageElement.checkImageElementHWSimilar(smallElement,largeElement,largeScaleW,largeScaleH,1) # 垂直线相似度
+        similarH = ImageElement.checkImageElementHWSimilar1(smallElement,largeElement,largeScaleW,largeScaleH,0) # 水平线相似度
+        if similarH>=0.7 :
+            similarV = ImageElement.checkImageElementHWSimilar1(smallElement,largeElement,largeScaleW,largeScaleH,1) # 垂直线相似度
+        else:
+            similarV = 0
+            #return ImageElement.cached[cacheKey]
         #print("matchedH/totalLinesH=%d/%d,matchedV/totalLinesV=%d/%d" %(matchedH,totalLinesH,matchedV,totalLinesV))
-        similar =  (similarH+similarV)/2
-        ImageElement.cached[cacheKey] = (similar,scale)
-        return  similar, scale
+        similar =  0 if similarV==0  else  (similarH+similarV)/2
+        similar2 = 0
+        if similar<0.9 and abs(scale-1)<0.03 and abs(smallElement.blackPixelCount-largeElement.blackPixelCount)<15:
+            #print("%s:%s : scale=%f, blackPixelCount=%d,%d" %(self.name,otherImgElement.name,scale,smallElement.blackPixelCount,largeElement.blackPixelCount))
+            # 只有  blackPixelCount , scale 相近的图 才 考虑 match2, 否则 Challenge B-03 的 AB 被认为 相似
+            similarH2 = ImageElement.checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW,largeScaleH,0) # 水平线相似度
+            if similarH2>=0.7:
+                similarV2 = ImageElement.checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW,largeScaleH,1) # 垂直线相似度
+                similar2 = (similarH2+similarV2)/2
+        ImageElement.cached[cacheKey] = (similar,similar2,scale)
+        return  ImageElement.cached[cacheKey]
         
-        comSampleCount = 50    
-        #
-        # 水平方法抽取 50 个样本 线段
-        # 垂直方法抽取 50 个样本 线段
-        #  计算这些字段 相似度
-        # ( 不检测所有点 只是 为了效率 ) 
-        # 
-        #dy = smallElement
-        hlinesY = ImageElement.getSamplePointForImgSimilarDetect(smallElement.y0,smallElement.ey,comSampleCount)
-        vlinesX = ImageElement.getSamplePointForImgSimilarDetect(smallElement.x0,smallElement.ex,comSampleCount)
-        #print("hlinesY = ", hlinesY )
-        #print("vlinesX = ", vlinesX )
-        totalLines = 0     # 总 检测的 线段 数
-        matchedLines = 0   # 其中 匹配的 线段数
-        maxLineCount = max(len(vlinesX),len(hlinesY))
-        for i in range(maxLineCount):
-            if i<len(hlinesY): # 水平线
-                hlineY1 = hlinesY[i]
-                hlineY2 = largeElement.y0+int((hlineY1-smallElement.y0)*largeScaleH+0.5)
-                totalLines += 1
-                if ImageElement.isImageElementLineSegmentSimilar(smallElement,largeElement,hlineY1,hlineY2,largeScaleW,0):
-                    matchedLines += 1
-                #else:
-                #    print("水平线 i=%d 匹配失败" %i)    
-            if i<len(vlinesX): # 垂直线
-                vlineX1 = vlinesX[i]
-                vlineX2 = largeElement.x0+int((vlineX1-smallElement.x0)*largeScaleW+0.5)
-                totalLines += 1
-                if ImageElement.isImageElementLineSegmentSimilar(smallElement,largeElement,vlineX1,vlineX2,largeScaleH,1):
-                    matchedLines += 1
-                #else:
-                #    print("垂直线 i=%d 匹配失败"  %i)  
-            # 前 10 组 线 匹配程度<70% 返回 0        
-            if (i==10 or i==20) and matchedLines/totalLines < 0.7:
-                #print("i=%d matchedLines/totalLines : %d/%d = %f" %(i,matchedLines,totalLines,matchedLines/totalLines))
-                ImageElement.cached[cacheKey] = (0,scale)
-                return 0,scale
-        if Agent._DEBUG:    
-            print("matchedLines/totalLines  = %d/%d" %(matchedLines,totalLines ))   
-        ImageElement.cached[cacheKey] = (matchedLines/totalLines,scale) 
-        return matchedLines/totalLines ,scale      
+ 
     CheckSampleLineCount = 50    
     
     #
     #  检测 水平 或 垂直方向 的 相似度
     #   scale : hvType==0 时 水平 或 垂直 的 
     #
-    def checkImageElementHWSimilar(smallElement,largeElement,largeScaleW:float,largeScaleH:float,hvType:int):
+    def checkImageElementHWSimilar1(smallElement,largeElement,largeScaleW:float,largeScaleH:float,hvType:int):
         testSampleCount = 50    
         if hvType==0: # 水平线
             lines = ImageElement.getSamplePointForImgSimilarDetect(smallElement.y0,smallElement.ey,testSampleCount)
@@ -427,17 +397,98 @@ class ImageElement:
                 matchedLines += 1
             if (i==10 and matchedLines/totalLines < 0.5) or (i==10 and matchedLines/totalLines < 0.7):
                 break
-        matchedRatio =  matchedLines/totalLines
-        if matchedRatio<0.9:
-            #print("matchedLines/totalLines = %d/%d = %f" %(matchedLines,totalLines,matchedRatio))
-            # Challenge Problem B-07 : "C-ROTAGE90","6" 比较 无法使用线段比较 , 使用 像素 比较:
-            #largeElement.blackPixelCount / smallElement.blackPixelCount
-            #
-            countBlackPixs = [0,0,0,0,0,0,0,0]
-            nParts = len(countBlackPixs)  # 将图片分为 八端
-            
-            pass 
-        return matchedRatio,matchedLines,totalLines
+        return matchedLines/totalLines
+
+    #
+    # 检测类似 Challenge Problem B-07 : 使用 checkImageElementHWSimilar1 线段发不能 检测的
+    #
+    def checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW:float,largeScaleH:float,hvType:int):
+        testSampleCount = 50    
+        if hvType==0: # 水平线
+            lines = ImageElement.getSamplePointForImgSimilarDetect(smallElement.y0,smallElement.ey,testSampleCount)
+        else: #垂直线
+            lines = ImageElement.getSamplePointForImgSimilarDetect(smallElement.x0,smallElement.ex,testSampleCount)
+        #
+        # 先检测是否 外轮廓 相似:
+        #
+        totalLines = 0
+        matchedLines = 0
+        for i in  range(len(lines)):
+            if hvType==0: # 水平线
+                y1 = lines[i]  #
+                y2 = largeElement.y0+int((y1-smallElement.y0)*largeScaleH+0.5)
+                matched = ImageElement.isImageElementLineStartEndMatch(smallElement,largeElement,y1,y2,largeScaleW,0)
+            else:
+                x1 = lines[i]  #
+                x2 = largeElement.x0+int((x1-smallElement.x0)*largeScaleW+0.5)
+                matched = ImageElement.isImageElementLineStartEndMatch(smallElement,largeElement,x1,x2,largeScaleH,1)
+            totalLines += 1
+            if matched:
+                matchedLines += 1
+            if (i==10 and matchedLines/totalLines < 0.5) or (i==10 and matchedLines/totalLines < 0.7):
+                break
+
+        if  matchedLines/totalLines<0.8:
+            return 0
+
+        #print("matchedLines2/totalLines2 = %d/%d = %f" %(matchedLines,totalLines,matchedLines/totalLines))
+        # Challenge Problem B-07 : "C-ROTAGE90","6" 比较 无法使用线段比较 , 使用 像素 比较:
+        #largeElement.blackPixelCount / smallElement.blackPixelCount
+        #
+        nParts = 8  # 将图片分为 八端, 比较每段的 像素 
+        countBlackPixs1 = [0 for i in range(nParts)]  # 每端 的像素 个数
+        countBlackPixs2 = [0 for i in range(nParts)]
+        """
+        #posLst1 = []  # 分界
+        #posLst2 = []
+        if hvType==0: # 水平线
+            startPos1 = smallElement.y0
+            endPos1 = smallElement.ey
+            startPos2 = largeElement.y0
+            endPos2 = largeElement.ey
+        else:
+            startPos1 = smallElement.x0
+            endPos1 = smallElement.ex
+            startPos2 = largeElement.x0
+            endPos2 = largeElement.ex
+
+        #for i in range(nParts):
+        #    posLst1.append( startPos1+int((endPos1-startPos1)*(i+1)/(nParts+1)) )    
+        #    posLst2.append( startPos2+int((endPos2-startPos2)*(i+1)/(nParts+1)) )    
+        """
+
+        #print("startPos=%d,endPos=%d,posLst=%s,startPos2=%d,endPos2=%d,posLst2=%s" %(startPos,endPos,posLst,startPos2,endPos2,posLst2))
+        for y,x in product(range(smallElement.y0,smallElement.ey),range(smallElement.x0,smallElement.ex)):
+            if smallElement.image[y,x]!=0:
+                continue
+            if hvType==0: # 水平线
+                i = int((y-smallElement.y0)*nParts / (smallElement.ey-smallElement.y0))
+            else:
+                i = int((x-smallElement.x0)*nParts / (smallElement.ex-smallElement.x0))
+            countBlackPixs1[i] += 1
+
+        for y,x in product(range(largeElement.y0,largeElement.ey),range(largeElement.x0,largeElement.ex)):    
+            if largeElement.image[y,x]!=0:
+                continue
+            if hvType==0: # 水平线
+                i = int((y-largeElement.y0)*nParts / (largeElement.ey-largeElement.y0))
+            else:
+                i = int((x-largeElement.x0)*nParts / (largeElement.ex-largeElement.x0))
+            countBlackPixs2[i] += 1
+
+        totalRatioDiff = 0
+        for i in range(nParts):
+            ratio1 = countBlackPixs1[i]/smallElement.blackPixelCount
+            ratio2 = countBlackPixs2[i]/largeElement.blackPixelCount
+            totalRatioDiff += abs(ratio1-ratio2)
+            #print( "%d : 图1 %d/%d=%f  图2 %d/%d=%f" %(i,countBlackPixs1[i],smallElement.blackPixelCount,ratio1,countBlackPixs2[i],largeElement.blackPixelCount,ratio2) )
+        avgRatioDiff = totalRatioDiff / nParts
+        #print("avgRatioDiff = ",avgRatioDiff)
+        if avgRatioDiff<0.03:
+            return matchedLines/totalLines
+        return 0    
+        #nParts = len(countBlackPixs) 
+        #return matchedLines/totalLines
         
     #
     #  @param hvType :0 水平线, 1:垂直线
@@ -608,6 +659,48 @@ class ImageElement:
             #    return False
             #lineSeg2 = 
     #
+    #  判断 水平线 或 垂直线 起始点和终点匹配
+    #  @param hvType :0 水平线, 1:垂直线
+    #   scale 是 imageElement2 / imageElement1 的 图形放缩比例
+    #  @param imageElement1 小图, imageElement2 : 大图
+    #         
+    def isImageElementLineStartEndMatch(imageElement1,imageElement2,linePos1:int,linePos2:int,scale:float,hvType:int):
+        if hvType==0: # 水平线
+            lineSegments1 = imageElement1.getHLineSegments(linePos1)
+            lineSegments2 = imageElement2.getHLineSegments(linePos2)
+            imgElement1Pos = imageElement1.x0
+            #imgElement1PosEnd = imageElement1.ex
+            imgElement2Pos = imageElement2.x0
+            #imgElement2PosEnd = imageElement2.ex
+        else: #垂直线
+            lineSegments1 = imageElement1.getVLineSegments(linePos1)  
+            lineSegments2 = imageElement2.getVLineSegments(linePos2) 
+            imgElement1Pos = imageElement1.y0
+            #imgElement1PosEnd = imageElement1.ey
+            imgElement2Pos = imageElement2.y0
+            #imgElement2PosEnd = imageElement2.ey
+        nSegments = len(lineSegments1)   
+        nSegments2 = len(lineSegments2)
+        #print("%s 位置=%d,%d : nSegments=%d,nSegments2=%d "%("水平线" if hvType==0 else "垂直线",linePos1,linePos2,nSegments,nSegments2) )
+        if nSegments==0 and nSegments2==0:
+            return True
+        if nSegments==0:
+            return lineSegments2[nSegments-1][1]  - lineSegments2[0][0] <=5
+        if nSegments2==0:
+            return lineSegments1[nSegments-1][1]  - lineSegments1[0][0] <=5
+        PosDelta = 3           
+        startPos1 = lineSegments1[0][0]
+        startPos2 = lineSegments2[0][0]
+        startPos2By1 = imgElement2Pos + (startPos1-imgElement1Pos)*scale   # startPos1 映射到 imageElement2 的位置
+        #print("%s 位置=%d,%d : startPos1=%d,startPos2=%d,startPos2By1=%d "%("水平线" if hvType==0 else "垂直线",linePos1,linePos2,startPos1,startPos2,startPos2By1) )
+        if abs(startPos2-startPos2By1)>PosDelta:
+            return False
+        endPos1 = lineSegments1[nSegments-1][1] 
+        endPos2 = lineSegments2[nSegments2-1][1] 
+        endPos2By1 = imgElement2Pos + (endPos1-imgElement1Pos)*scale   # startPos1 映射到 imageElement2 的位置
+        #print("%s 位置=%d,%d : endPos1=%d,endPos2=%d,endPos2By1=%d "%("水平线" if hvType==0 else "垂直线",linePos1,linePos2,endPos1,endPos2,endPos2By1) )
+        return abs(endPos2-endPos2By1)<=PosDelta
+    #
     # 从 start 到 end 之间(平均)抽取 maxCount 个 检测点 
     #  其中 前  10 个 按 (end-start)/10 的 间隔 提取
     #      接下 10 个 按 (end-start)/20 的 间隔 提取
@@ -636,11 +729,11 @@ class ImageElement:
         return a1+a2+a3                 
     
     def isEquals(self,otherImgElement,similarTh=0.90,scaleTh=0.05)->bool:
-        similar,scale = self.getImageElementSimilarScale(otherImgElement)
+        similar,similar2,scale = self.getImageElementSimilarScale(otherImgElement)
         return similar>=similarTh and abs(scale-1)<scaleTh
 
     def isSimilar(self,otherImgElement,similarTh=0.90)->bool:
-        similar,_ = self.getImageElementSimilarScale(otherImgElement)
+        similar,similar2,_ = self.getImageElementSimilarScale(otherImgElement)
         #print("%s-%s : similar=%f" %(self.name,otherImgElement.name,similar))
         return similar>=similarTh
 
@@ -802,7 +895,7 @@ class ImageElement:
             for i1 in  range(n):
                 if indexOf(cmped,i1)>=0:
                     continue
-                similar,scale = e2.getImageElementSimilarScale(imgElements1[i1])
+                similar,similar2,scale = e2.getImageElementSimilarScale(imgElements1[i1])
                 if similar>=similarTh and abs(scale-1)<scaleTh:
                     cmped.append(i1)
                     matched = i1
@@ -826,7 +919,7 @@ class ImageElement:
             for i2 in range(n2):
                 if indexOf(cmped,i2)>=0:
                     continue
-                similar,scale = e.getImageElementSimilarScale(inElements[i2])
+                similar,similar2,scale = e.getImageElementSimilarScale(inElements[i2])
                 if similar>=similarTh and abs(scale-1)<scaleTh:
                     cmped.append(i2)
                     matched = i2
@@ -1188,11 +1281,13 @@ def getCVFlipMode(flipTransMode)->int:
 # 描述 两个图形元素的 变换规则, 例如
 #       
 class ImageElementTrans:
-    def __init__(self,transMode,matched:bool,similar:float,scale):
+    def __init__(self,transMode,matched:bool,similar:float,matched2:bool,similar2:float,scale):
         #self.elementIdx = elementIdx
         self.transMode = transMode  # IMGTRANSMODE_EQ 等
         self.matched = matched # similar > 给定的阈值, 即 表名 两个元素 满足 transMode 的变换规则 ; similar>=0.90
         self.similar = similar
+        self.matched2 = matched2 # 轮廓 匹配
+        self.similar2 = similar2
         self.scale = scale
 
 #END class ImageElementTrans
@@ -1289,6 +1384,7 @@ class Images2:
     # Challenge D-02","BC","ROTAGE270" : B-ROTAGE270 与 C 相似度:  0.899999
     #
     SimilarMatchedThreshold = 0.85   
+    Similar2MatchedThreshold = 0.9
 #
 #  判断 两个图形元素之间 的 变换规则, 
 # 即: 图形元素 dstImgElement 是否 能由 srcImfElement 经过 转换获得
@@ -1302,35 +1398,35 @@ class Images2:
         #if( Agent._DEBUG ):
         #    print("parseImeElementTrans %s-%s for %s.... "%(srcImgElement.name, dstImgElement.name,transMode))
         if transMode==IMGTRANSMODE_EQ:
-            similar,scale = srcImgElement.getImageElementSimilarScale(dstImgElement)
-            return ImageElementTrans(transMode,similar>=0.85,similar,scale)
+            similar,similar2,scale = srcImgElement.getImageElementSimilarScale(dstImgElement)
+            return ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)
         if transMode==IMGTRANSMODE_FLIPV or transMode==IMGTRANSMODE_FLIPH or transMode==IMGTRANSMODE_FLIPVH:
             if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
                 #flipMode = 0 if transMode==IMGTRANSMODE_FLIPV else ( 1 if transMode==IMGTRANSMODE_FLIPH else -1)
-                similar,scale = srcImgElement.getFlipedImage(transMode).getImageElementSimilarScale(dstImgElement)
+                similar,similar2,scale = srcImgElement.getFlipedImage(transMode).getImageElementSimilarScale(dstImgElement)
                 #print("flipTransMode=%s : 相似度=%f 比例=%f" %(flipTransMode,similar,scale))
-                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,scale)    
-            return  ImageElementTrans(transMode,False,0,0)
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)    
+            return  ImageElementTrans(transMode,False,0,False,0,0)
         if transMode==IMGTRANSMODE_FILLED:    
             if srcImgElement.getBlackPixelRatio()<0.3 and dstImgElement.getBlackPixelRatio()>0.4:
-                similar,scale = srcImgElement.getFilledImage().getImageElementSimilarScale(dstImgElement)
+                similar,similar2,scale = srcImgElement.getFilledImage().getImageElementSimilarScale(dstImgElement)
                 #print("FILLED: 相似度=%f 比例=%f" %(similar,scale))
-                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,scale)    
-            return  ImageElementTrans(transMode,False,0,0)
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)    
+            return  ImageElementTrans(transMode,False,0,False,0,0)
         if transMode==IMGTRANSMODE_UNFILLED:    
             if srcImgElement.getBlackPixelRatio()>0.4 and dstImgElement.getBlackPixelRatio()<0.3:
-                similar,scale = dstImgElement.getFilledImage().getImageElementSimilarScale(srcImgElement)
-                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,scale)    
-            return  ImageElementTrans(transMode,False,0,0)
+                similar,similar2,scale = dstImgElement.getFilledImage().getImageElementSimilarScale(srcImgElement)
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)    
+            return  ImageElementTrans(transMode,False,0,False,0,0)
 
         if transMode==IMGTRANSMODE_ROTATE1 or transMode==IMGTRANSMODE_ROTATE2 or transMode==IMGTRANSMODE_ROTATE3:
             if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
                 rotateImg = srcImgElement.getRotateImage(transMode)
                 if rotateImg==None:
-                    return ImageElementTrans(transMode,False,0,0)
-                similar,scale = rotateImg.getImageElementSimilarScale(dstImgElement)
-                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,scale)  
-            return  ImageElementTrans(transMode,False,0,0)
+                    return ImageElementTrans(transMode,False,0,False,0,0)
+                similar,similar2,scale = rotateImg.getImageElementSimilarScale(dstImgElement)
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)  
+            return  ImageElementTrans(transMode,False,0,False,0,0)
 
 
     def isImgElementTransMatched(self,elementIdx:int,transMode:str) ->bool:   
@@ -1562,10 +1658,10 @@ class Images3:
         #imgAC = self.agent.getImage2(self.imgId1+self.imgId3)
         k = -1
         for i in range(n):
-            similar1,scale1 = self.img1Elements[i].getImageElementSimilarScale(self.img2Elements[i])
+            similar1,_,scale1 = self.img1Elements[i].getImageElementSimilarScale(self.img2Elements[i])
             eq = similar1>=0.90 and abs(scale1-1)<0.05  # AB 的 第 i 个元素 相等
             if eq:
-                similar2,scale2 = self.img1Elements[i].getImageElementSimilarScale(self.img3Elements[i])
+                similar2,_,scale2 = self.img1Elements[i].getImageElementSimilarScale(self.img3Elements[i])
                 eq = similar2>=0.90 and abs(scale2-1)<0.05 # AC 的 第 i 个元素 相等
             if not eq:
                 if k>=0:
@@ -1682,6 +1778,7 @@ class Agent:
             allElementsMatchedTransMode.append(elementsMatchedTransMode)
             eqTrans = imgsFrm1.getImgElementTrans(elementIdx,IMGTRANSMODE_EQ)
             if eqTrans.matched:  # 如果 两个 图片 相等, 不再判断 其他 转换:
+                 # 不能加 or eqTrans.matched2, 否则 : B-06 的 AC 就 不会 比较 翻转了
                 forAllTrans = [eqTrans]
             else:
                 forAllTrans = imgsFrm1.getAllImgElementTrans(elementIdx,[IMGTRANSMODE_EQ,IMGTRANSMODE_FLIPV,IMGTRANSMODE_FLIPH,IMGTRANSMODE_FILLED,IMGTRANSMODE_UNFILLED]) 
@@ -1690,7 +1787,7 @@ class Agent:
             #
             caseRotate = True
             for transInfo in forAllTrans:
-                if transInfo.matched:
+                if transInfo.matched or transInfo.matched2:
                     caseRotate = False
                     break
             if caseRotate:
@@ -1700,14 +1797,16 @@ class Agent:
                         forAllTrans.append(t)
                         break
             for transInfo in forAllTrans:  # r similar,scale
-                if not transInfo.matched:
+                #if Agent._DEBUG and imgs2Name=="C6" and imgs1Name=="AB":
+                #    print("%s-%s: imgs1.transMode=%s,%s:%f,%s:%f " %(imgs1Name,imgs2Name,transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.matched2,transInfo.similar2))
+                if not transInfo.matched and not transInfo.matched2:
                     continue
-                #if Agent._DEBUG and imgs2Name=="B3":
+                #if Agent._DEBUG and imgs2Name=="C6":
                 #    print("%s : 满足变换规则 %s" %(imgs1Name,transInfo.transMode))
                 transInfo2 = imgsFrm2.getImgElementTrans(elementIdx,transInfo.transMode)
                 #if Agent._DEBUG and imgs2Name=="B3":
                 #    print("  %s : 检测是否满足变换规则 %s 结果matched = %s, similar=%f " %(imgs2Name,transInfo.transMode,transInfo2.matched,transInfo2.similar))
-                if not transInfo2.matched:
+                if not transInfo2.matched and not transInfo2.matched2:
                     continue
                 elementsMatchedTransMode.append(transInfo.transMode)
                 score = 10 
@@ -1725,7 +1824,10 @@ class Agent:
                         # B-05
                         score += 3 
                         desc2 += "(基于整图翻转)"
-
+                if not transInfo.matched or not transInfo2.matched:
+                    # Challenge B-07
+                    scoreFactor *= 0.5
+                    desc2 += "(仅轮廓相似)"
                 scoreAddTo.addScore(score*scoreFactor*scoreWeight,imgs1Name,imgs2Name,"元素%d匹配相同变换%s%s"%(elementIdx,transInfo.transMode,desc2))
 
         #
@@ -1771,7 +1873,8 @@ class Agent:
                     elif imgsFrm1.isIncSameElements() and imgsFrm2.isIncSameElements():                 
                         scoreAddTo.addScore(7* scoreWeight,imgs1Name,imgs2Name,"两组减少了同倍数的相同元素");       
             else:
-                scoreAddTo.addScore(1* scoreWeight,imgs1Name,imgs2Name,"两组元素增减个数相同")
+                scoreAddTo.addScore(2* scoreWeight,imgs1Name,imgs2Name,"两组元素增减个数相同")
+                # Challenge Problem B-03 : 需要 较高的 分数, 
 
         #
         # 判断像素 比例 变化规律
