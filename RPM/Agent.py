@@ -69,6 +69,14 @@ def binarySearch(array:list,key:any,cmp)->int:
             return mid;
     return -(low + 1)
 
+def indexOf(list,value):
+    if list==None:
+        return -1
+    try:
+        return list.index(value)
+    except ValueError:    
+        return -1
+    
     #
     # return 0 : v1==v2==v3
     #        1 : v1+v2==v3
@@ -82,6 +90,16 @@ def _compare3(v1,v2,v3)->bool:
     if v3>0 and abs((v1-v3) / v3 )<0.01 and abs((v2-v3) / v3 )<0.01:
         return 0
     return -1
+
+def countImageDiff(image1,image2):
+    return cv2.countNonZero(cv2.absdiff(image1,image2))
+#
+# 不同相似的 比例
+#
+def countImageDiffRatio(image1,image2):
+    height, width = image1.shape
+    diffCount = countImageDiff(image1,image2)
+    return diffCount / (height*width), diffCount,height*width
 
 #
 #  y 行 最后一个 黑点
@@ -116,6 +134,9 @@ def startBlackPointY(image,x,fromY=0,endY=0):
              return y
     return -1   
 
+#
+# x线上 最后一个黑点
+#
 def endBlackPointY(image,x,fromY=0,endY=0):
     if endY<=0:
         endY,_ = image.shape
@@ -128,7 +149,7 @@ def endBlackPointY(image,x,fromY=0,endY=0):
 #  获取  水平线(horizontals)(坐标==y) 上的线段 起始 结束 点
 #   返回 起始/结束 点的 
 #   
-def getHLineSegments(image,y,fromX=0,endX=0):
+def getHLineSegments(image,y,ignoreSegSize, fromX=0,endX=0):
     if endX<=0:
         _, endX = image.shape
     setments = []
@@ -139,16 +160,16 @@ def getHLineSegments(image,y,fromX=0,endX=0):
                 x1 = x
         else:
             if x1>=0:
-               setments.append((x1,x))
+               if x-x1>ignoreSegSize : setments.append((x1,x))
                x1 = -1   
-    if x1>=0:
+    if x1>=0 and x-x1>ignoreSegSize :
         setments.append((x1,x))
     return setments
 
 #
 # 获取 垂直线(坐标==x) 方向 上的线段  
 #
-def getVLineSegments(image,x,fromY=0,endY=0):
+def getVLineSegments(image,x,ignoreSegSize,fromY=0,endY=0):
     if endY<=0:
         endY,_ = image.shape
     setments = []
@@ -159,9 +180,9 @@ def getVLineSegments(image,x,fromY=0,endY=0):
                 y1 = y
         else:
             if y1>=0:
-               setments.append((y1,y))
+               if y-y1>ignoreSegSize :setments.append((y1,y))
                y1 = -1   
-    if y1>=0:
+    if y1>=0 and y-y1>ignoreSegSize :
         setments.append((y1,y))
     return setments
 
@@ -169,13 +190,7 @@ def  toRelativeCenterPoint(image,x,y):
     height,width = image.shape
     return x-width/2, y-height/2
 
-def indexOf(list,value):
-    if list==None:
-        return -1
-    try:
-        return list.index(value)
-    except ValueError:    
-        return -1
+
 
 #
 # 图片中的一个元素 (图片的相连区域)
@@ -190,12 +205,21 @@ class ImageElement:
         self.hLineSegs = {}  # 缓存 水平 线段
         self.vLineSegs = {} # 缓存 垂直 线段
         self.name = name
+        self.IgnoreSegSize = 0  # 取 
+        self.x0 = 0
+        self.y0 = 0
+        self.ex = 0
+        self.ey = 0
         #self.match = "none"
         #  "DELETED",  
         #self.transform = "not matched"
         #self.match_weight = 0
     def update(self):
         self.blackPixelCount= 0
+        self.x0 = 0
+        self.y0 = 0
+        self.ex = 0
+        self.ey = 0
         self.transformImgs = {} # 缓存 翻转, 旋转, 填充 等 变换
         self.hLineSegs = {}  # 缓存 水平 线段
         self.vLineSegs = {} # 缓存 垂直 线段
@@ -271,7 +295,7 @@ class ImageElement:
         if y in self.hLineSegs:
             #print("使用缓存")
             return self.hLineSegs[y]
-        v = getHLineSegments(self.image,y,self.x0,self.ex)
+        v = getHLineSegments(self.image,y,self.IgnoreSegSize,self.x0,self.ex)
         self.hLineSegs[y] = v
         return v
     
@@ -279,7 +303,7 @@ class ImageElement:
         if x in self.vLineSegs:
             #print("使用缓存")
             return self.vLineSegs[x]
-        v = getVLineSegments(self.image,x,self.y0,self.ey)
+        v = getVLineSegments(self.image,x,self.IgnoreSegSize,self.y0,self.ey)
         self.vLineSegs[x] = v
         return v
     
@@ -329,7 +353,7 @@ class ImageElement:
             #    h1,w1 = self.getSize()
             #    h2,w2 = otherImgElement.getSize()
             #    print("scaleH=%f,scaleW=%f 图1(h=%d,w=%d),图2(h=%d,w=%d)" %(scale,w1 /  w2,h1,w1,h2,w2))
-            ImageElement.cached[cacheKey] = (0,0,0)
+            ImageElement.cached[cacheKey] = (0,0,False,0)
             return ImageElement.cached[cacheKey]
         #h1,w1 = self.getSize()
         #h2,w2 = otherImgElement.getSize()
@@ -356,16 +380,23 @@ class ImageElement:
             similarV = 0
             #return ImageElement.cached[cacheKey]
         #print("matchedH/totalLinesH=%d/%d,matchedV/totalLinesV=%d/%d" %(matchedH,totalLinesH,matchedV,totalLinesV))
+        #print("similarH = %f,similarV=%f" %(similarH, similarV))
         similar =  0 if similarV==0  else  (similarH+similarV)/2
         similar2 = 0
-        if similar<0.9 and abs(scale-1)<0.03 and abs(smallElement.blackPixelCount-largeElement.blackPixelCount)<15:
+        pixMatched = False
+        if similar<0.9 :
+            checkPixMatch = abs(scale-1)<0.03 and abs(smallElement.blackPixelCount-largeElement.blackPixelCount)<15
             #print("%s:%s : scale=%f, blackPixelCount=%d,%d" %(self.name,otherImgElement.name,scale,smallElement.blackPixelCount,largeElement.blackPixelCount))
             # 只有  blackPixelCount , scale 相近的图 才 考虑 match2, 否则 Challenge B-03 的 AB 被认为 相似
-            similarH2 = ImageElement.checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW,largeScaleH,0) # 水平线相似度
+            # Challenge B-07 : 
+            # D-09 : B3 : 外形相似, 内部 不匹配
+            similarH2,pixMatchedH2 = ImageElement.checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW,largeScaleH,0,checkPixMatch) # 水平线相似度
+            #print("similarH2 =%s pixMatchedH2=%s" % (similarH2,pixMatchedH2))
             if similarH2>=0.7:
-                similarV2 = ImageElement.checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW,largeScaleH,1) # 垂直线相似度
+                similarV2,pixMatchedV2 = ImageElement.checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW,largeScaleH,1,checkPixMatch) # 垂直线相似度
                 similar2 = (similarH2+similarV2)/2
-        ImageElement.cached[cacheKey] = (similar,similar2,scale)
+                pixMatched = pixMatchedH2 and pixMatchedV2
+        ImageElement.cached[cacheKey] = (similar,similar2,pixMatched,scale)
         return  ImageElement.cached[cacheKey]
         
  
@@ -395,14 +426,15 @@ class ImageElement:
             totalLines += 1
             if matched:
                 matchedLines += 1
-            if (i==10 and matchedLines/totalLines < 0.5) or (i==10 and matchedLines/totalLines < 0.7):
+            if (i==10 and matchedLines/totalLines < 0.5) or (i==20 and matchedLines/totalLines < 0.7):
                 break
         return matchedLines/totalLines
 
     #
     # 检测类似 Challenge Problem B-07 : 使用 checkImageElementHWSimilar1 线段发不能 检测的
+    # @return (外形匹配度,内部像素匹配) 
     #
-    def checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW:float,largeScaleH:float,hvType:int):
+    def checkImageElementHWSimilar2(smallElement,largeElement,largeScaleW:float,largeScaleH:float,hvType:int,checkPixMatch:bool):
         testSampleCount = 50    
         if hvType==0: # 水平线
             lines = ImageElement.getSamplePointForImgSimilarDetect(smallElement.y0,smallElement.ey,testSampleCount)
@@ -425,11 +457,13 @@ class ImageElement:
             totalLines += 1
             if matched:
                 matchedLines += 1
-            if (i==10 and matchedLines/totalLines < 0.5) or (i==10 and matchedLines/totalLines < 0.7):
+            if (i==10 and matchedLines/totalLines < 0.5) or (i==20 and matchedLines/totalLines < 0.7):
                 break
 
-        if  matchedLines/totalLines<0.8:
-            return 0
+        #if  matchedLines/totalLines<0.8:
+        #    return 0,False
+        if not checkPixMatch or matchedLines/totalLines<0.8:
+            return matchedLines/totalLines,False
 
         #print("matchedLines2/totalLines2 = %d/%d = %f" %(matchedLines,totalLines,matchedLines/totalLines))
         # Challenge Problem B-07 : "C-ROTAGE90","6" 比较 无法使用线段比较 , 使用 像素 比较:
@@ -483,10 +517,11 @@ class ImageElement:
             totalRatioDiff += abs(ratio1-ratio2)
             #print( "%d : 图1 %d/%d=%f  图2 %d/%d=%f" %(i,countBlackPixs1[i],smallElement.blackPixelCount,ratio1,countBlackPixs2[i],largeElement.blackPixelCount,ratio2) )
         avgRatioDiff = totalRatioDiff / nParts
+        return matchedLines/totalLines , avgRatioDiff<0.03
         #print("avgRatioDiff = ",avgRatioDiff)
-        if avgRatioDiff<0.03:
-            return matchedLines/totalLines
-        return 0    
+        #if avgRatioDiff<0.03:  # 
+        #    return matchedLines/totalLines
+        #return 0    
         #nParts = len(countBlackPixs) 
         #return matchedLines/totalLines
         
@@ -729,11 +764,11 @@ class ImageElement:
         return a1+a2+a3                 
     
     def isEquals(self,otherImgElement,similarTh=0.90,scaleTh=0.05)->bool:
-        similar,similar2,scale = self.getImageElementSimilarScale(otherImgElement)
+        similar,_,_,scale = self.getImageElementSimilarScale(otherImgElement)
         return similar>=similarTh and abs(scale-1)<scaleTh
 
     def isSimilar(self,otherImgElement,similarTh=0.90)->bool:
-        similar,similar2,_ = self.getImageElementSimilarScale(otherImgElement)
+        similar,_,_,_ = self.getImageElementSimilarScale(otherImgElement)
         #print("%s-%s : similar=%f" %(self.name,otherImgElement.name,similar))
         return similar>=similarTh
 
@@ -780,7 +815,7 @@ class ImageElement:
     #
     # get
     #
-    def  getWholeFlipedCenterPoint(self,flipMode:str|int):
+    def  getWholeFlipedCenterPoint(self,flipMode):
         height,width = self.image.shape
         wholeX0,wholeY0  = width/2,height/2
         x0,y0 = (self.x0+self.ex)/2,(self.y0+self.ey)/2
@@ -867,7 +902,7 @@ class ImageElement:
         #imgElement.image = self.image.copy()
         img = imgElement.image 
         for y in range(self.y0,self.ey):
-            for x in range(self.getStartPointX(y)+1,self.getEndPointX(y)):
+            for x in range(self.getStartPointX(y),self.getEndPointX(y)+1):
                 img[y,x] = 0
         for x in range(self.x0,self.ex):
             startY = self.getStartPointY(x)
@@ -884,6 +919,31 @@ class ImageElement:
         self.transformImgs[imgKey] = imgElement
         return imgElement
     
+    def isFilledImage(self):
+        cacheKey = "isFilledImage("+self.name+")"
+        if cacheKey in ImageElement.cached:
+            #print("[getImageElementSimilarScale]使用缓存 %s" % cacheKey)
+            return ImageElement.cached[cacheKey]
+        #if IMGTRANSMODE_FILLED in self.transformImgs:
+        filledImg = self.getFilledImage() #self.transformImgs.get(imgKey)
+        #r,_,_ = countImageDiffRatio(filledImg.image,self.image)
+        #print("%s : r=%f" % (self.name, r))
+        ImageElement.cached[cacheKey] = countImageDiff(filledImg.image,self.image)==0
+        return ImageElement.cached[cacheKey]
+        #for y in range(self.y0,self.ey):
+        #    for x in range(self.getStartPointX(y)+1,self.getEndPointX(y)):
+    #
+    #  1: 含 全填充 ; 2: 含未全填充
+    #     
+    def getImagesFilledFlags(imgElements:list)->int:
+        flags = 0
+        for e in imgElements:
+            if e.isFilledImage():
+                flags |= 1
+            else:
+                flags |= 2
+        return flags    
+    
     def isElementsEqualsIgnoreOrder(imgElements1:list,imgElements2:list,similarTh=0.90,scaleTh=0.05)->bool:
         n = len(imgElements1)
         if n!=len(imgElements2):
@@ -895,12 +955,23 @@ class ImageElement:
             for i1 in  range(n):
                 if indexOf(cmped,i1)>=0:
                     continue
-                similar,similar2,scale = e2.getImageElementSimilarScale(imgElements1[i1])
+                similar,_,_,scale = e2.getImageElementSimilarScale(imgElements1[i1])
                 if similar>=similarTh and abs(scale-1)<scaleTh:
                     cmped.append(i1)
                     matched = i1
                     break
             if matched<0:
+                return False
+        return True          
+
+    def isAllElementsEquals(imgElements:list,similarTh=0.90,scaleTh=0.15)->bool:
+        if len(imgElements)==0:
+            return True
+        e0 = imgElements[0]
+        for e in imgElements[1:]:
+            similar,_,_,scale = e0.getImageElementSimilarScale(e)
+            #print("%s - %s : similar=%f,scale=%f " %(e0.name,e.name,similar,scale))
+            if similar<similarTh or abs(scale-1)>scaleTh:
                 return False
         return True            
     
@@ -919,7 +990,7 @@ class ImageElement:
             for i2 in range(n2):
                 if indexOf(cmped,i2)>=0:
                     continue
-                similar,similar2,scale = e.getImageElementSimilarScale(inElements[i2])
+                similar,_,_,scale = e.getImageElementSimilarScale(inElements[i2])
                 if similar>=similarTh and abs(scale-1)<scaleTh:
                     cmped.append(i2)
                     matched = i2
@@ -962,6 +1033,104 @@ class ImageElement:
                 return -1
             sum += y
         return sum / len(elements)    
+    
+    #def isBlackPixel(self,x:int,y:int,relativeXY0:bool=True):
+    #    if relativeXY0:
+    #        x += self.x0
+    #        y += self.y0
+    #    imgHeight,imgWidth = self.image.shape
+    #    return 
+
+
+    def getMaxSize(elements:list):
+        height,width = elements[0].getSize()
+        for e in elements[1:]:
+            w,h = e.getSize()
+            if height<h: height = h
+            if width<w: width = w 
+        return   height,width  
+    
+    def getMinXY0(elements:list):
+        x0,y0 = elements[0].x0,elements[0].y0
+        for e in elements[1:]:
+            if x0>e.x0 : x0 = e.x0
+            if y0>e.y0 : y0 = e.y0
+        return x0,y0    
+    
+    #
+    # 只保留 不同的点
+    #
+    def getXORImageElement(elements:list):
+        cacheKey = "XORImage("+(",".join(map(lambda e:e.name,elements)))+")"
+        if cacheKey in ImageElement.cached:
+            #print("[getImageElementSimilarScale]使用缓存 %s" % cacheKey)
+            return ImageElement.cached[cacheKey]
+        elements2 =  elements[1:]
+        height,width = elements[0].image.shape
+        for e in elements2:
+            h2,w2 = e.image.shape
+            if height>h2 : height = h2
+            if width>w2 : width = w2
+        imgElement = ImageElement((height,width),cacheKey)    
+        imgElement.IgnoreSegSize = 3
+        for y,x in product(range(height), range(width)):
+            v0 = elements[0].image[y,x]
+            for e in elements2:
+                if e.image[y,x]!=v0:
+                    imgElement.addPixel(x,y) # img[y,x] = 0
+                    break
+        ImageElement.cached[cacheKey] = imgElement
+        return imgElement
+    
+    def getANDImageElement(elements:list):
+        cacheKey = "ANDImage("+(",".join(map(lambda e:e.name,elements)))+")"
+        if cacheKey in ImageElement.cached:
+            #print("[getImageElementSimilarScale]使用缓存 %s" % cacheKey)
+            return ImageElement.cached[cacheKey]
+        elements2 =  elements[1:]
+        height,width = elements[0].image.shape
+        for e in elements2:
+            h2,w2 = e.image.shape
+            if height>h2 : height = h2
+            if width>w2 : width = w2
+        imgElement = ImageElement((height,width),cacheKey)    
+        imgElement.IgnoreSegSize = 3
+        for y,x in product(range(height), range(width)):
+            z = True
+            for e in elements:
+                if e.image[y,x]!=0:
+                    z = False
+                    break
+            if z: imgElement.addPixel(x,y) # img[y,x] = 0
+        ImageElement.cached[cacheKey] = imgElement
+        return imgElement
+    
+    """
+    def getXORImage1(elements:list):
+        cacheKey = "XORImage("+(",".join(map(lambda e:e.name,elements)))+")"
+        if cacheKey in ImageElement.cached:
+            #print("[getXORImageElement]使用缓存 %s" % cacheKey)
+            return ImageElement.cached[cacheKey]
+        #print("[getXORImageElement] cacheKey = %s" % cacheKey)
+        e0 = elements[0]
+        elements2 =  elements[1:]
+        size = ImageElement.getMaxSize(elements)
+        x0,y0 = ImageElement.getMinXY0(elements)
+        #height,width = elements[0].image.shape
+        #height,width = elements[0].getSize()
+        
+        imgElement = ImageElement(elements[0].image.shape,cacheKey)
+        imgElement.IgnoreSegSize = 3
+        #img = imgElement.image #np.full(self.image.shape, 255, np.uint8)
+        for y,x in product(range(size[0]), range(size[1])):
+            v0 = e0.image[e0.x0+y,e0.y0+x]
+            for e in elements2:
+                if e.image[y+e.y0,x+e.x0]!=v0:
+                    imgElement.addPixel(x0+x,y0+y) # img[y,x] = 0
+                    break
+        ImageElement.cached[cacheKey] = imgElement
+        return imgElement
+    """   
 
 # END class ImageElement
 
@@ -1114,9 +1283,12 @@ class Image1:
             return self._asImgElement
         except AttributeError as e:
             pass
+        elements = self.getImageElements()
+        if len(elements)==1:
+            self._asImgElement = elements[0]
+            return elements[0]
         self._asImgElement = ImageElement(None,self.name)
         self._asImgElement.image = self.image
-        elements = self.getImageElements()
         if len(elements)==0:
             self._asImgElement.x0 = 0
             self._asImgElement.y0 = 0
@@ -1281,12 +1453,13 @@ def getCVFlipMode(flipTransMode)->int:
 # 描述 两个图形元素的 变换规则, 例如
 #       
 class ImageElementTrans:
-    def __init__(self,transMode,matched:bool,similar:float,matched2:bool,similar2:float,scale):
+    def __init__(self,transMode,matched:bool,similar:float,matched2:bool,matched3:bool,similar2:float,scale):
         #self.elementIdx = elementIdx
         self.transMode = transMode  # IMGTRANSMODE_EQ 等
         self.matched = matched # similar > 给定的阈值, 即 表名 两个元素 满足 transMode 的变换规则 ; similar>=0.90
+        self.matched2 = matched2 # 轮廓 匹配 , 且 内部像素匹配 ( 只在 !matched 时 有效 )
+        self.matched3 = matched3 # 轮廓 匹配  (  内部像素匹配 肯不匹配 )
         self.similar = similar
-        self.matched2 = matched2 # 轮廓 匹配
         self.similar2 = similar2
         self.scale = scale
 
@@ -1398,35 +1571,40 @@ class Images2:
         #if( Agent._DEBUG ):
         #    print("parseImeElementTrans %s-%s for %s.... "%(srcImgElement.name, dstImgElement.name,transMode))
         if transMode==IMGTRANSMODE_EQ:
-            similar,similar2,scale = srcImgElement.getImageElementSimilarScale(dstImgElement)
-            return ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)
+            similar,similar2,pixMatched,scale = srcImgElement.getImageElementSimilarScale(dstImgElement)
+            matched3 = similar2>=Images2.Similar2MatchedThreshold
+            return ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,matched3 and pixMatched,matched3,similar2,scale)
         if transMode==IMGTRANSMODE_FLIPV or transMode==IMGTRANSMODE_FLIPH or transMode==IMGTRANSMODE_FLIPVH:
             if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
                 #flipMode = 0 if transMode==IMGTRANSMODE_FLIPV else ( 1 if transMode==IMGTRANSMODE_FLIPH else -1)
-                similar,similar2,scale = srcImgElement.getFlipedImage(transMode).getImageElementSimilarScale(dstImgElement)
+                similar,similar2,pixMatched,scale = srcImgElement.getFlipedImage(transMode).getImageElementSimilarScale(dstImgElement)
+                matched3 = similar2>=Images2.Similar2MatchedThreshold
                 #print("flipTransMode=%s : 相似度=%f 比例=%f" %(flipTransMode,similar,scale))
-                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)    
-            return  ImageElementTrans(transMode,False,0,False,0,0)
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,matched3 and pixMatched,matched3,similar2,scale)    
+            return  ImageElementTrans(transMode,False,0,False,False,0,0)
         if transMode==IMGTRANSMODE_FILLED:    
             if srcImgElement.getBlackPixelRatio()<0.3 and dstImgElement.getBlackPixelRatio()>0.4:
-                similar,similar2,scale = srcImgElement.getFilledImage().getImageElementSimilarScale(dstImgElement)
+                similar,similar2,pixMatched,scale = srcImgElement.getFilledImage().getImageElementSimilarScale(dstImgElement)
+                matched3 = similar2>=Images2.Similar2MatchedThreshold
                 #print("FILLED: 相似度=%f 比例=%f" %(similar,scale))
-                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)    
-            return  ImageElementTrans(transMode,False,0,False,0,0)
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,matched3 and pixMatched,matched3,similar2,scale)    
+            return  ImageElementTrans(transMode,False,0,False,False,0,0)
         if transMode==IMGTRANSMODE_UNFILLED:    
             if srcImgElement.getBlackPixelRatio()>0.4 and dstImgElement.getBlackPixelRatio()<0.3:
-                similar,similar2,scale = dstImgElement.getFilledImage().getImageElementSimilarScale(srcImgElement)
-                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)    
-            return  ImageElementTrans(transMode,False,0,False,0,0)
+                similar,similar2,pixMatched,scale = dstImgElement.getFilledImage().getImageElementSimilarScale(srcImgElement)
+                matched3 = similar2>=Images2.Similar2MatchedThreshold
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,matched3 and pixMatched,matched3,similar2,scale)    
+            return  ImageElementTrans(transMode,False,0,False,False,0,0)
 
         if transMode==IMGTRANSMODE_ROTATE1 or transMode==IMGTRANSMODE_ROTATE2 or transMode==IMGTRANSMODE_ROTATE3:
             if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
                 rotateImg = srcImgElement.getRotateImage(transMode)
                 if rotateImg==None:
-                    return ImageElementTrans(transMode,False,0,False,0,0)
-                similar,similar2,scale = rotateImg.getImageElementSimilarScale(dstImgElement)
-                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,similar2>=Images2.Similar2MatchedThreshold,similar2,scale)  
-            return  ImageElementTrans(transMode,False,0,False,0,0)
+                    return ImageElementTrans(transMode,False,0,False,False,0,0)
+                similar,similar2,pixMatched,scale = rotateImg.getImageElementSimilarScale(dstImgElement)
+                matched3 = similar2>=Images2.Similar2MatchedThreshold
+                return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,matched3 and pixMatched,matched3,similar2,scale)  
+            return  ImageElementTrans(transMode,False,0,False,False,0,0)
 
 
     def isImgElementTransMatched(self,elementIdx:int,transMode:str) ->bool:   
@@ -1438,9 +1616,8 @@ class Images2:
     #
     # 判断 图片 是基于整个图 翻转
     #
-    def isWholemgElementFliped(self,elementIdx:int,flipTransMode:str)->bool:
-        if not self.isImgElementTransMatched(elementIdx,flipTransMode):
-            return False
+    def isWholeImgElementFliped(self,elementIdx:int,flipTransMode:str)->bool:
+        if not self.isImgElementTransMatched(elementIdx,flipTransMode): return False
         #flipMode = getFlipModeModeByTransMode(flipTransMode)
         img1 = self.img1Elements[elementIdx]
         img2 = self.img2Elements[elementIdx]
@@ -1449,6 +1626,12 @@ class Images2:
         #print("%s图(基于整图)翻转后的 中心点 = (%f,%f) , %s图中心点 =  (%f,%f) " %(imgs1Name[0:1],xA0,yA0,imgs1Name[1:2],xB0,yB0))
         return abs(x1-x2)<3 and abs(y1-y2)<3
 
+    def isWholeImgElementsFliped(self,flipTransMode:str)->bool:
+        n = len(self.img1Elements)
+        if n!=len(self.img2Elements) : return False
+        for i in range(n):
+            if not self.isWholeImgElementFliped(i,flipTransMode): return False
+        return True
         
         #if transModeOnly==None or transModeOnly==IMGTRANSMODE_SIMILAR:# = "SIMILAR"   
         #    pass 
@@ -1471,6 +1654,18 @@ class Images2:
         for elementIdx in range(startElementIdx,endElementIdx):
             transInfo = self.getImgElementTrans(elementIdx,IMGTRANSMODE_EQ)
             if not transInfo.matched or abs(transInfo.scale-1)>0.05 :
+                return False
+        return True    
+    
+    #
+    # 判断 从 startElementIdx - endElementIdx 的元素 外形匹配 , D-09 的 B3
+    #
+    def isImgElementsOutterSharpMatched(self,startElementIdx=0,endElementIdx=0)->bool:
+        if endElementIdx==0:
+            endElementIdx = len(self.transElements)
+        for elementIdx in range(startElementIdx,endElementIdx):
+            transInfo = self.getImgElementTrans(elementIdx,IMGTRANSMODE_EQ)
+            if not transInfo.matched and  not transInfo.matched3 :
                 return False
         return True    
     
@@ -1522,6 +1717,16 @@ class Images2:
         img2BlackPoints = self.img2.getSumImgElementsBlackPoints()
         return  -1000 if img2BlackPoints==0 else img1BlackPoints/img2BlackPoints
 
+    def getXORImageElement(self)->ImageElement:
+        return ImageElement.getXORImageElement([self.img1.asImgElement(),self.img2.asImgElement()])
+    
+    def getANDImage(self)->ImageElement:
+        try:
+            return self._andImage
+        except AttributeError as e:pass 
+        self._andImage = cv2.bitwise_or(self.img1.image,self.img2.image,mask=None)
+        #self._andImage = ImageElement.getANDImageElement([self.img1.asImgElement(),self.img2.asImgElement()]).image
+        return self._andImage
 
 # End class Images2
 
@@ -1569,7 +1774,8 @@ class Images3:
         #self.frmType = frmType
         
     #
-    # 在 三个图形中 找到 与 otherImgId 相等或相似的 图片序号(0,1,2 之一)
+    # 在 三个图形中 找到 与 otherImgId 相等或相似的 图片序号(0,1,2 之一) 
+    #  元素个数相同 且  元素[i]==otherImg.元素[i]
     # @param otherImgId "A","B","1","2",... 等
     # 
     def getIndexOfEqualsImage(self,otherImgId:str,excludeIdxs:list=None) ->int:    
@@ -1579,6 +1785,33 @@ class Images3:
             if indexOf(excludeIdxs,i)<0 and len(self.imgsElementsLst[i])==nElements and self.agent.getImages2(self.name[i]+otherImgId).isImgElementsEqualsOrSimilar():
                 return i
         return -1
+    
+    #
+    # 同 getIndexOfEqualsImage , 但 不考虑 增加的元素
+    #
+    def getIndexOfEqualsImageIgnoreInced(self,otherImgId:str,excludeIdxs:list=None) ->int:    
+        otherimgElements = self.agent.getImageElements(otherImgId) 
+        nElements = len(otherimgElements)
+        for i in range(3):
+            if indexOf(excludeIdxs,i)>=0 : continue
+            n = min(len(self.imgsElementsLst[i]),nElements)
+            if( self.agent.getImages2(self.name[i]+otherImgId).isImgElementsEqualsOrSimilar(0,n) ):
+                return i
+        return -1    
+
+    #
+    # 在 三个图形中 找到 与 otherImgId 外形相似的 图片序号(0,1,2 之一)
+    # @param otherImgId "A","B","1","2",... 等
+    # 
+    def getIndexOfOutterSharpEqImage(self,otherImgId:str,excludeIdxs:list=None) ->int:    
+        otherimgElements = self.agent.getImageElements(otherImgId) 
+        nElements = len(otherimgElements)
+        for i in range(3):
+            if indexOf(excludeIdxs,i)<0 and len(self.imgsElementsLst[i])==nElements and self.agent.getImages2(self.name[i]+otherImgId).isImgElementsOutterSharpMatched():
+                return i
+        return -1
+    
+    #
  
     #
     # @return 1 : 图1+图2==图3
@@ -1658,10 +1891,10 @@ class Images3:
         #imgAC = self.agent.getImage2(self.imgId1+self.imgId3)
         k = -1
         for i in range(n):
-            similar1,_,scale1 = self.img1Elements[i].getImageElementSimilarScale(self.img2Elements[i])
+            similar1,_,_,scale1 = self.img1Elements[i].getImageElementSimilarScale(self.img2Elements[i])
             eq = similar1>=0.90 and abs(scale1-1)<0.05  # AB 的 第 i 个元素 相等
             if eq:
-                similar2,_,scale2 = self.img1Elements[i].getImageElementSimilarScale(self.img3Elements[i])
+                similar2,_,_,scale2 = self.img1Elements[i].getImageElementSimilarScale(self.img3Elements[i])
                 eq = similar2>=0.90 and abs(scale2-1)<0.05 # AC 的 第 i 个元素 相等
             if not eq:
                 if k>=0:
@@ -1670,7 +1903,26 @@ class Images3:
                 k = i
         self.notEqImgElementIdx = k        
         return k
+    
+    #
+    # get XOR Image
+    #
+    #def getXORImageElement(self,elementIdx:int)->ImageElement:
+    #    return ImageElement.getXORImageElement([self.img1Elements[elementIdx],self.img2Elements[elementIdx],self.img3Elements[elementIdx]])
+    def getXORImageElement(self)->ImageElement:
+        return ImageElement.getXORImageElement([self.img1.asImgElement(),self.img2.asImgElement(),self.img3.asImgElement()])
 
+    #
+    # @return 1: A and B == C
+    #
+    def getANDMatched(self)->int:
+        try:
+            return self._andMatched
+        except AttributeError as e:pass  
+        imgsAB = self.agent.getImages2(self.imgId1+self.imgId2) 
+        diffRatio,diffCount,_ = countImageDiffRatio(imgsAB.getANDImage(),self.agent.getImage(self.imgId3))
+        #print("[%s - %s] diffRatio=%f,diffCount=%d" %(imgsAB.name,self.imgId2,diffRatio,diffCount))
+        return diffRatio<0.01                               
  
 # END class Images3   
      
@@ -1772,7 +2024,8 @@ class Agent:
                 # Challenge Problem B-05 的 权重太大
                 scoreFactor /= 10
         #print("[%s-%s] scoreFactor=%f,minElementCount=%f = min(%d,%d); elementCountDiff1=%d,elementCountDiff2=%d" % (imgs1Name,imgs2Name,scoreFactor,minElementCount,imgsFrm1.getImgElementCount(),imgsFrm2.getImgElementCount(),elementCountDiff1,elementCountDiff2))
-        allElementsMatchedTransMode = []
+        caseCheckFilled = True
+        allElementsMatchedTransMode = []  # indexed by elementIdx
         for elementIdx in range( minElementCount ):
             elementsMatchedTransMode = []
             allElementsMatchedTransMode.append(elementsMatchedTransMode)
@@ -1814,13 +2067,13 @@ class Agent:
                 desc2 = ""
                 if transInfo.transMode==IMGTRANSMODE_FLIPV or transInfo.transMode==IMGTRANSMODE_FLIPV or transInfo.transMode==IMGTRANSMODE_FLIPVH:
                     # 如果同时基于 整图 翻转, 加分
-                    if imgsFrm1.isWholemgElementFliped(elementIdx,transInfo.transMode) and  imgsFrm2.isWholemgElementFliped(elementIdx,transInfo.transMode):
+                    if imgsFrm1.isWholeImgElementFliped(elementIdx,transInfo.transMode) and  imgsFrm2.isWholeImgElementFliped(elementIdx,transInfo.transMode):
                         score += 3 
                         desc2 += "(基于整图翻转)"
                 elif transInfo.transMode==IMGTRANSMODE_EQ:
                     # 正方形, 圆形 等对称图形, 如果 同时 基于整图翻转 , 加分
-                    if (imgsFrm1.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPV) and  imgsFrm2.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPV))\
-                    or (imgsFrm1.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPH) and  imgsFrm2.isWholemgElementFliped(elementIdx,IMGTRANSMODE_FLIPH)):
+                    if (imgsFrm1.isWholeImgElementFliped(elementIdx,IMGTRANSMODE_FLIPV) and  imgsFrm2.isWholeImgElementFliped(elementIdx,IMGTRANSMODE_FLIPV))\
+                    or (imgsFrm1.isWholeImgElementFliped(elementIdx,IMGTRANSMODE_FLIPH) and  imgsFrm2.isWholeImgElementFliped(elementIdx,IMGTRANSMODE_FLIPH)):
                         # B-05
                         score += 3 
                         desc2 += "(基于整图翻转)"
@@ -1829,6 +2082,7 @@ class Agent:
                     scoreFactor *= 0.5
                     desc2 += "(仅轮廓相似)"
                 scoreAddTo.addScore(score*scoreFactor*scoreWeight,imgs1Name,imgs2Name,"元素%d匹配相同变换%s%s"%(elementIdx,transInfo.transMode,desc2))
+                caseCheckFilled = False
 
         #
         # Challenge Problem B-10 : 如果 整图 旋转  AB/C4 
@@ -1890,6 +2144,37 @@ class Agent:
         elif diff < 0.15:
             scoreAddTo.addScore(1,imgs1Name,imgs2Name,"两图片像素个数变化率相差<0.15") 
 
+        #
+        #  Challenge Problem B-04 : 区答案 3,4
+        #     
+        if caseCheckFilled:
+            filledFlags =  ImageElement.getImagesFilledFlags(imgsFrm1.img1Elements) #[elementIdx].isFilledImage()
+            if (filledFlags==1 or filledFlags==2 )  \
+                and filledFlags==ImageElement.getImagesFilledFlags(imgsFrm2.img1Elements) \
+                and filledFlags==ImageElement.getImagesFilledFlags(imgsFrm1.img2Elements) \
+                and filledFlags==ImageElement.getImagesFilledFlags(imgsFrm2.img2Elements) :
+                    scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两组元素全为填充图" if filledFlags==1 else "两组元素全为非填充图") 
+
+        #
+        # Challenge Problem B-04 : 区答案 4,6
+        #
+        for elementIdx in range( minElementCount ):
+            if len(allElementsMatchedTransMode[elementIdx])>0:
+                continue
+            eqTrans1 = imgsFrm1.getImgElementTrans(elementIdx,IMGTRANSMODE_EQ)
+            eqTrans2 = imgsFrm2.getImgElementTrans(elementIdx,IMGTRANSMODE_EQ)
+            if not eqTrans1.matched and not eqTrans2.matched and eqTrans1.matched3 and eqTrans2.matched3:  # 外轮廓匹配 , 且等
+                r1 = imgsFrm1.img2Elements[elementIdx].blackPixelCount / imgsFrm1.img1Elements[elementIdx].blackPixelCount 
+                r2 = imgsFrm2.img2Elements[elementIdx].blackPixelCount / imgsFrm2.img1Elements[elementIdx].blackPixelCount 
+                #print("%s : matched=%s matched3=%s r1=%f ; %s : matched=%s matched3=%s r2=%f" %(imgsFrm1.name, eqTrans1.matched,eqTrans1.matched3,r1,imgsFrm2.name, eqTrans2.matched,eqTrans2.matched3,r2))
+                if (r1>=2 and r2>=2) or (r1<=0.5 and r2<=0.5):
+                    scoreAddTo.addScore(0.5*scoreFactor*scoreWeight,imgs1Name,imgs2Name,"元素%d轮廓相似, 相似个数变化趋势相近"%(elementIdx))
+            #if eqTrans1.matched!=eqTrans2.matched:
+
+            #scoreFactor
+
+
+
 
     #END method calculateImages2MatchScore
     
@@ -1920,6 +2205,10 @@ class Agent:
         all6ImgEquals = False    
         caseAddOrSubEq = True 
         caseXorEq = True
+        caseOuterSharpCmp = True  # 判断外形  
+        caseXorCmp = True
+        caseAndCmp = True
+        caseCheckEqsIgnoreInced = True
         #  
         # 判断 两组 图片 为 相同组合 或 完成 相同
         # 例子:  
@@ -1932,6 +2221,10 @@ class Agent:
             #scoreAddTo.addScore(10 * scoreWeight ,imgs1Name,imgs2Name,"两组图形具有相同组合")
             caseAddOrSubEq = False
             caseXorEq = False
+            caseOuterSharpCmp = False
+            caseXorCmp = False
+            caseAndCmp = False
+            caseCheckEqsIgnoreInced = False
             if self.getImages2(imgs2Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs2Name[1:3]).isImgElementsEqualsOrSimilar():
                 # GH? 图形相同, ABC 也相同 ( 因为 同组合 )
                 if self.getImages2(imgs2Name[0:2]).isImgElementsEquals() and self.getImages2(imgs2Name[1:3]).isImgElementsEquals():
@@ -1949,6 +2242,9 @@ class Agent:
                 and self.getImages2(imgs2Name[0:2]).isImgElementsEquals() and self.getImages2(imgs2Name[1:3]).isImgElementsEquals()
             # ABC 相等, GHI 相等
             scoreAddTo.addScore((12 if eq else 10) * scoreWeight ,imgs1Name,imgs2Name,"每组图形全相等" if eq else "每组图形全相似")
+            caseOuterSharpCmp = False
+            caseCheckEqsIgnoreInced = False
+            caseXorCmp = False
         #
         # 判断是否两组图片 元素 个数 全相同 , 或 个数的变换规律相同
         #
@@ -2029,6 +2325,9 @@ class Agent:
                    or sizeIncRatioAB>0.3 and sizeIncRatioGH>0.3 and sizeIncRatioBC>0.3 and sizeIncRatioHI>0.3 :
                     # 面积 同时 变化:
                     scoreAddTo.addScore(2 * scoreWeight ,imgs1Name,imgs2Name,"两组图形面积Delta变化趋势相同")
+        else: # 两组元素
+            caseOuterSharpCmp = False              
+            
         
         if nElementIfSame>0 and not all6ImgEquals: # 六个 图形 具有 相同 元素 个数 (但不全等)
             #
@@ -2051,6 +2350,7 @@ class Agent:
                     scoreAddTo.addScore( 10*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为90度旋转关系")
                     caseAddOrSubEq = False
                     caseXorEq = False
+                    caseAndCmp = False
                     continue
                 if   imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
                   and self.getImages2(imgs1Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
@@ -2059,12 +2359,15 @@ class Agent:
                     scoreAddTo.addScore( 10*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为-90度旋转关系")
                     caseAddOrSubEq = False
                     caseXorEq = False
+                    caseAndCmp = False
                     continue
                 imgsAC = self.getImages2(imgs1Name[0:1]+imgs1Name[2:3])
                 if (imgsAC.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) and self.getImages2(imgs2Name[0:1]+imgs2Name[2:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) )\
                        or (imgsAC.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) and self.getImages2(imgs2Name[0:1]+imgs2Name[2:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3)) :
                     caseAddOrSubEq = False
                     caseXorEq = False
+                    caseAndCmp = False
+                    # 
                     if imgsAB.isBlackPixelRatioEquals(i) and self.getImages2(imgs2Name[0:2]).isBlackPixelRatioEquals(i) : # todo 需要判断 满足 45 度的旋转 ,暂时 使用 isBlackPixelRatioEquals 代替
                         # Challenge D-02 :  [CDH-AE2]两组图形为45度旋转关系 : 判断错误, 暂时 降为 4 分
                         scoreAddTo.addScore( 4*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为45度旋转关系")
@@ -2072,15 +2375,86 @@ class Agent:
                 #elif imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) 
         # END if nElementIfSame>0: #六个 图形 具有 相同 元素 个数
         
+        """
         if (imgs1Name=="ABC" and imgs2Name.startswith("GH")) or (imgs1Name=="ADG" and imgs2Name.startswith("CF")) :
             #imgsCG = self.getImages2(imgs1Name[2]+imgs2Name[0])
             #imgsAI = self.getImages2(imgs1Name[0]+imgs2Name[2])
             #print("all6ImgEquals=%s, nElementIfSame=%d" %(all6ImgEquals,nElementIfSame))
             #print("检查 %s 与 %s ..." %(imgs1Name[0]+imgs1Name[2],imgs2Name[0]+imgs2Name[2]))
             self.calculateImages2MatchScore(imgs1Name[0]+imgs1Name[2],imgs2Name[0]+imgs2Name[2],scoreAddTo,0.2,True)
-        # C-07 
+            # C-07 
+        """    
+        imgsAG = self.getImages2(imgs1Name[0]+imgs2Name[0])
+        imgsBH = self.getImages2(imgs1Name[1]+imgs2Name[1])
+        imgsCI = self.getImages2(imgs1Name[2]+imgs2Name[2])
+        #
+        # 检查 是否满足 翻转 ( C-07 )
+        #
+        for flipMode in [IMGTRANSMODE_FLIPV,IMGTRANSMODE_FLIPH]:
+            if imgsAG.isWholeImgElementsFliped(flipMode) and  imgsBH.isWholeImgElementsFliped(flipMode) and  imgsCI.isWholeImgElementsFliped(flipMode):
+                scoreAddTo.addScore( 10* scoreWeight,imgs1Name,imgs2Name,"两组图形%s翻转关系" %("水平" if flipMode==IMGTRANSMODE_FLIPH else "上下"))
+                break
 
 
+        if caseOuterSharpCmp and nElementIfSame>0:
+            # 判断 外形相似  : D-09
+            idxOfImgs2 = []  # 第二组图片 对应在 第一组 图片中的序号 
+            for i in range(3):
+                j = imgsFrm1.getIndexOfOutterSharpEqImage(imgs2Name[i],idxOfImgs2)  # 第二组图片的 第 i 个图片, 在 第一组 中对应的序号 ( 不存在时 j==-1 )
+                if j<0:
+                    break
+                idxOfImgs2.append(j)
+            if len(idxOfImgs2)==3:
+                scoreAddTo.addScore( 3,imgs1Name,imgs2Name,"两组图形外形具有相同组合") #D-09
+            
+        #
+        #  考虑 是否新增了相同的元素  : D-2
+        #   
+        if  caseCheckEqsIgnoreInced:
+            idxOfImgs2 = []  # 第二组图片 对应在 第一组 图片中的序号   idxOfImgs2[idxOfImg2] == idxOfImg1
+            inced0 = 0
+            for i in range(3):  # i : 
+                j = imgsFrm1.getIndexOfEqualsImageIgnoreInced(imgs2Name[i],idxOfImgs2)  # 第二组图片的 第 i 个图片, 在 第一组 中对应的序号 ( 不存在时 j==-1 )
+                if j<0 :
+                    break
+                if not ImageElement.isAllElementsEquals(imgsFrm1.imgsElementsLst[j]) or not ImageElement.isAllElementsEquals(imgsFrm2.imgsElementsLst[i]):
+                    break
+                inced = len(imgsFrm2.imgsElementsLst[i]) - len(imgsFrm1.imgsElementsLst[j]) 
+                if inced==0: break
+                if inced0==0:
+                    inced0 = inced
+                elif  inced!=inced0:
+                    break
+                idxOfImgs2.append(j)  # imgs1Name[j]==imgs2Name[i]
+            if len(idxOfImgs2)==3:
+                scoreAddTo.addScore( 10,imgs1Name,imgs2Name,"两组图形具有相同组合,并同时增加相同个数(%d)元素,对应序号=%s" %(inced0,idxOfImgs2))
+                pass    
+        #
+        # 三个图形 异或 后, 相同  : D-09
+        #     
+        if caseXorCmp:
+            xorImg1 = imgsFrm1.getXORImageElement()   
+            xorImg2 = imgsFrm2.getXORImageElement()   
+            ratio,_,_ = countImageDiffRatio(xorImg1.image,xorImg2.image)
+            #print("------%s - %s : xorImgDiffRatio = %s" %(xorImg1.name,xorImg2.name,ratio))
+            if ratio<0.03:
+                scoreAddTo.addScore( 3 ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
+                #caseAndCmp = False  
+                #caseAddOrSubEq = False
+            elif ratio<0.05:
+                scoreAddTo.addScore( 1 ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
+                #caseAndCmp = False 
+                #caseAddOrSubEq = False
+            
+            #if ratio<0.07:
+            #    scoreAddTo.addScore( 3 if ratio<0.03 else ( 2 if ratio<0.05 else 1),imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
+
+        if caseAndCmp:
+            andMatched = imgsFrm1.getANDMatched() 
+            if andMatched>0 and imgsFrm2.getANDMatched()==andMatched:
+                if andMatched==1:
+                    scoreAddTo.addScore( 5 ,imgs1Name,imgs2Name,"两组图形 %s 位与 %s == %s 且 %s 位与 %s==%s" %(imgsFrm1.imgId1,imgsFrm1.imgId2,imgsFrm1.imgId3,imgsFrm2.imgId1,imgsFrm2.imgId2,imgsFrm2.imgId3)) 
+        
         #
         # 是否 匹配 相加 属性 或 相减
         #  即:  图片A + 图片B == 图片C
@@ -2105,6 +2479,7 @@ class Agent:
                         scoreAddTo.addScore( 6 * scoreWeight,imgs1Name,imgs2Name,"第%d和%d图片像素合并==第%d个图片"%(abc[0]+1,abc[1]+1,abc[2]+1))
                     caseAddOrSubEq = False    
                     caseXorEq = False    
+                    caseAndCmp = False
                     break
         
         # E-04 : 答案 2 与 8 都一样
@@ -2113,6 +2488,7 @@ class Agent:
             if c1>0 and c1==imgsFrm2.compareImgPixelCount() :        
                 caseAddOrSubEq = False    
                 caseXorEq = False 
+                caseAndCmp = False
                 #  - E-04 : 答案 2 与 8 都一样 , 进一步考虑图片形状
                 if  ( imgsFrm1.compareImgPixelHeight()==0 and imgsFrm2.compareImgPixelHeight()==0 and imgsFrm1.compareImgPixelWidth()==c1 and imgsFrm2.compareImgPixelWidth()==c1  ) \
                  or ( imgsFrm1.compareImgPixelWidth()==0 and imgsFrm2.compareImgPixelWidth()==0  and imgsFrm1.compareImgPixelHeight()==c1 and imgsFrm2.compareImgPixelHeight()==c1):
