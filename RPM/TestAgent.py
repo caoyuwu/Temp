@@ -336,6 +336,7 @@ def getImageElement(agent:Agent,imgId:str,elementdx:int):
         img = agent.getImageElements(imgId[0])[elementdx]
         return img.getTransImage(imgId[2:])
     return  agent.getImageElements(imgId)[elementdx]
+
 def testImageElementSimilarScale(problemId,imgId1,imgId2,elementdx1=0,elementdx2=0):
     agent = prepareAgent(problemId)    
 
@@ -343,7 +344,7 @@ def testImageElementSimilarScale(problemId,imgId1,imgId2,elementdx1=0,elementdx2
     printImageElement(img1,problemId)
     img2 = getImageElement(agent,imgId2,elementdx2)
     similar,similar2,pixMatched,scale = img1.getImageElementSimilarScale(img2)
-    print("[%s] 中 %s.%d 与 %s.%d 相似 = %f %f %s, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar,similar2,pixMatched,scale))    
+    print("[%s] 中 %s.%d 与 %s.%d 相似(similar) = %f similar2=%f pixMatched=%s, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar,similar2,pixMatched,scale))    
     #similar1,scale1 = img1.getImageElementSimilarScale(img2)
     #print("[%s] 中 %s.%d 与 %s.%d 相似 = %f, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar1,scale1))   
     #similar1,scale1 = img1.getImageElementSimilarScale(img2)
@@ -491,11 +492,35 @@ def test_getANDImage(problemId:str,imgs2Id:str)->None:
     img = agent.getImages2(imgs2Id)
     CV2Utils.printImage1(img.getANDImage())
 
-def test_getANDMatched(problemId:str,imgs3Id:str)->None: 
+def test_getBitOPMatched(problemId:str,imgs3Id:str)->None: 
     agent = prepareAgent(problemId) 
     img = agent.getImages3(imgs3Id)
-    andMatched = img.getANDMatched()
+    andMatched = img.getBitOPMatched()
     print("[%s] %s : andMatched=%d " %(problemId,img.name,andMatched)) #diffRatio=0.042563,diffCount=1441
+    
+def test_getXORImage(problemId:str,imgs2Id:str)->None:
+    agent = prepareAgent(problemId) 
+    img = agent.getImages2(imgs2Id)
+    CV2Utils.printImage1(img.getXORImage())    
+    
+def test_getORImage(problemId:str,imgs2Id:str)->None:
+    agent = prepareAgent(problemId) 
+    img = agent.getImages2(imgs2Id)
+    orImg = img.getORImage()
+    CV2Utils.printImage1(orImg)    
+    cv2.imwrite('/temp/1.jpg',orImg) 
+
+def tmpTestImage()->None:    
+    problemId = "Challenge E-02"
+    agent = prepareAgent(problemId) 
+    imgs2Id = "AB"
+    img = agent.getImages2(imgs2Id)
+    orImg = img.getORImage()
+    imgC = agent.getImage("C")
+    xorImg = cv2.bitwise_not(cv2.bitwise_xor(orImg,imgC,mask=None),mask=None)
+    cv2.imwrite('/temp/1.jpg',orImg) 
+    cv2.imwrite('/temp/2.jpg',xorImg) 
+        
 #
 #  D-04
 #    
@@ -557,6 +582,7 @@ def main():
     #showSplitImages("B-10","C")
     #showSplitImages("C-09","C")
     #showSplitImages("C-09","2")
+    #showSplitImages("Challenge E-02","A")
     #testFlipImage("B-03","A") # ** 
     #testFlipImage("B-07","9") 
     #testFlipImage("B-05","A") 
@@ -572,8 +598,8 @@ def main():
     #testImageElementSimilarScale("C-02","A","G",1,1)  # 中 A.1 与 G.1 相似 = 1.000000, 比例 = 1.000000
     #testImageElementSimilarScale("C-11","A","B") # 两个小菱形  [C-11] 中 A 与 B 相似 = 1.000000, 比例 = 0.958333
     #testImageElementSimilarScale("B-03","A","B") #[B-03] 中 A 与 B 相似 = 0.000000, 比例 = 1.000000
-    #testImageElementSimilarScale("B-06","A-FLIPV","C")
-    #testImageElementSimilarScale("Challenge B-01","A","C")
+    #testImageElementSimilarScale("B-06","A-FLIPV","C") 
+    #estImageElementSimilarScale("Challenge B-01","A","C")  #中 A.0 与 C.0 相似(similar) = 0.980000 similar2=0.000000 
     #testImageElementSimilarScale("Challenge B-03","A","B") # 相似 = 0.000000 1.000000 False
     #testImageElementSimilarScale("Challenge D-02","B-ROTAGE270","C")
     #testImageElementSimilarScale("Challenge B-07","C-ROTAGE90","6")
@@ -653,10 +679,17 @@ def main():
     #test_isAllElementsEquals("D-12","C")
     #test_isAllElementsEquals("D-12","ABCDEFG12345678")
     #test_getANDImage("E-10","AB")
-    #test_getANDMatched("E-10","ABC") #diffRatio=0.042563,diffCount=1441
+    #test_getBitOPMatched("E-10","ABC") #diffRatio=0.042563,diffCount=1441 , andMatched=1 
     # test_getANDImage("E-10","GH")
-    #test_getANDMatched("E-10","GH2")
-    #test_getANDMatched("E-10","GH8")
+    #test_getBitOPMatched("E-10","GH2") # andMatched=0
+    #test_getBitOPMatched("E-10","GH8")  # andMatched=1
+    #test_getBitOPMatched("Challenge E-01","ABC") #andMatched=2 
+    #test_getORImage("Challenge E-02","AB")
+    #test_getBitOPMatched("Challenge E-02","ABC") #andMatched=3
+    #test_getBitOPMatched("Challenge E-02","DEF") #andMatched=3
+    #test_getBitOPMatched("Challenge E-02","GH7") #andMatched=3
+    
+    #tmpTestImage()
 
     #testAgentSolve("B-05")
     #testAgentSolve("B-05")
@@ -684,44 +717,51 @@ def main():
     #testAgentSolve("E-04") # 前两图片像素相减==第三个图片
     #testAgentSolve("C-06") #前两图片像素个数相加或减==第三个图片,且宽高匹配
 
+    #testAgentSolve("Challenge B-01") 
     #testAgentSolve("Challenge B-03") # 两组元素增减个数相同
+    #testAgentSolve("Challenge B-04") # [AB-C4]两组元素全为非填充图(区分答案3)
     #testAgentSolve("Challenge B-07")  #  
     #testAgentSolve("Challenge B-09")  #  [AB-C4] 两图片素个数变化率相差<0.05
     #testAgentSolve("Challenge B-06")   #  相等比较时, 斜线段 较多
     #testAgentSolve("Challenge B-07")   #  相等比较时,  需要考虑 match2 轮廓相似:[AB-C6]元素0匹配相同变换FLIPH(仅轮廓相似)
     #testAgentSolve("Challenge B-10")  #  
     #testAgentSolve("Challenge D-02")  #  
-    #testAgentSolve("Challenge E-01")  #
+    #testAgentSolve("Challenge E-01") #[ABC-GH6]两组图形 A bitxor B == C 且 G bitxor H==6
     
     #testAgentSolve("Challenge B-04") # ??? 通过是否填充判断???
+    #testAgentSolve("D-08") #组图形外形具有相同组合, 且两组元素全为填充图或非填充图
     #testAgentSolve("D-09") #  两组图形每组XOR后的图形相似
     #testAgentSolve("D-10") #  [ABC-GH1]两组图形每组XOR后的图形相似
     #testAgentSolve("D-12") 
-    #testAgentSolve("E-10")  # DEF/GH8   结果 = 2  (!!!期望结果 = 8) : a and b==c
+    #testAgentSolve("E-10")  # DEF/GH8   结果 = 2  (!!!期望结果 = 8) : a bitand b==c ABC-GH8]两组图形 A bitand B == C 且 G bitand H==8
     #testAgentSolve("E-11")
+    #testAgentSolve("Challenge E-02")  # [ABC-GH7]两组图形 A bitor B == C 且 G bitor H==7
     #
     # 有问题
     #
+    
     #testAgentSolve("Challenge B-08")   #  顶点 规律 test2:2
 
     #testAgentSolve("C-08") # 整体对称  结果 = 4 (!!!期望结果 =5);  test2:1
     #testAgentSolve("C-12") # ??? 结果 = 7 (!!!期望结果 =8) ;  test2:3
 
 
-    #testAgentSolve("E-12")
+    testAgentSolve("E-12") # ??? 结果 = 5 (!!!期望结果 =6)
 
-    #testAgentSolve("Challenge C-07")
+    
     #testAgentSolve("Challenge C-08")
     #testAgentSolve("Challenge C-10")
 
+    #testAgentSolve("Challenge D-04") #??
     #testAgentSolve("Challenge D-05") #??
     #testAgentSolve("Challenge D-06")
+    #testAgentSolve("Challenge D-07")
+
+    #testAgentSolve("Challenge D-09")
     #testAgentSolve("Challenge D-10")
     #testAgentSolve("Challenge D-11")
     #testAgentSolve("Challenge D-12")
 
-    #testAgentSolve("Challenge E-01")
-    #testAgentSolve("Challenge E-02")
     #testAgentSolve("Challenge E-04")
     #testAgentSolve("Challenge E-05")
     #testAgentSolve("Challenge E-06")

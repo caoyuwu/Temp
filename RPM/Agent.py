@@ -41,7 +41,14 @@ def load_problem_images(problem):
         # 
         # If the images have strong edges, shapes, or patterns that are primarily defined by contrast (e.g., black and white images), 
         # grayscale conversion will generally work well.
-        ravens_image = cv2.cvtColor(cv2.imread(img.visualFilename), cv2.COLOR_BGR2GRAY)
+        img = cv2.cvtColor(cv2.imread(img.visualFilename), cv2.COLOR_BGR2GRAY)
+        #
+        # 有 !=0 和 255 的  像素, (如  Challenge E-02) 这样会影响到 位运算, cv2.countNonZero 等
+        #
+        ravens_image = img
+        _, ravens_image = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+        #_, ravens_image = cv2.threshold(img, 64, 255, cv2.THRESH_BINARY)
+
         # print("ravens_image:", ravens_image)
         #
         # images["A"] = .../A.png
@@ -101,6 +108,37 @@ def countImageDiffRatio(image1,image2):
     diffCount = countImageDiff(image1,image2)
     return diffCount / (height*width), diffCount,height*width
 
+NeighborPixelsYX = [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
+#
+# 
+#
+def countImageDiffCaseNeighbor(image1,image2):
+    height,width = image1.shape
+    count = 0
+    for y,x in product(range(height), range(width)):
+        v1 = image1[y][x]
+        v2 = image2[y][x]
+        if  v1==v2: continue
+        if y>0 and x>0 and x<width-1 and y<height-1:
+            neighborCount = 0
+            #neighborCount = 0
+            if v1==0:
+                for yi,xi in NeighborPixelsYX:
+                    if image1[y+yi][x+xi]==0:# and image2[y+yi][x+xi]!=0: # 周围 不同的点
+                        neighborCount += 1
+                        if neighborCount>2:break        
+            else:
+                for yi,xi in NeighborPixelsYX:
+                    if image2[y+yi][x+xi]==0:# and image1[y+yi][x+xi]!=0:
+                        neighborCount += 1
+                        if neighborCount>3: break     
+            #print("y=%d x=%d neighborCount=%d, v1=%d,v2=%d" %(y,x,neighborCount,v1,v2))   
+            if neighborCount<=3:
+                continue
+        #if (v1!=0 and v1!=255) or (v2!=0 and v2!=255):
+        #    raise BaseException("??? v1=%d v2=%d" %(v1,v2))
+        count += 1
+    return count        
 #
 #  y 行 最后一个 黑点
 #
@@ -609,10 +647,13 @@ class ImageElement:
                 #if( Agent._DEBUG ):
                 #    print("%s 位置=%d,%d : 中心点不等 %f(by %f)!=%f, 线段=%s:%s 小图区间=(%d %d) 大图区间=(%d %d)  "%("水平线" if hvType==0 else "垂直线",linePos1,linePos2,c2By1,c1,c2,lineSeg1,lineSeg2,imgElement1Pos,imgElement1PosEnd,imgElement2Pos,imgElement2PosEnd ) )
                 return False
-            # Challenge Problems B-01 三角形 垂直 方向 可能 为 7
-            #if w1<=5 and w2<=5:
-            if w1<=7 and w2<=7:
+            if w1<=5 and w2<=5:
                 continue
+            #if w1<=7 and w2<=7:
+            # Challenge Problems B-01 三角形 垂直 方向 可能 为 9
+            if w1<=9 and w2<=9 and nSegments==2:
+                continue
+            # 
             dw = abs(w2-w1*scale)
             if dw>4 and dw/w2>0.05: # 线段宽度
                 #if( Agent._DEBUG ):
@@ -942,6 +983,7 @@ class ImageElement:
                 flags |= 1
             else:
                 flags |= 2
+            if flags==3: break    
         return flags    
     
     def isElementsEqualsIgnoreOrder(imgElements1:list,imgElements2:list,similarTh=0.90,scaleTh=0.05)->bool:
@@ -1708,8 +1750,8 @@ class Images2:
         img1X2,img1Y2 = self.img1Elements[1].getCenter()
         img2X1,img2Y1 = self.img2Elements[0].getCenter()
 
-        print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X1,img1Y1,img2X2,img2Y2))
-        print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X2,img1Y2,img2X1,img2Y1))
+        #print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X1,img1Y1,img2X2,img2Y2))
+        #print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X2,img1Y2,img2X1,img2Y1))
         return abs(img1X2-img2X1)<=2 or abs(img1Y2-img2Y1)<=2
 
     def getImagePixelRatio(self)->list:
@@ -1720,13 +1762,45 @@ class Images2:
     def getXORImageElement(self)->ImageElement:
         return ImageElement.getXORImageElement([self.img1.asImgElement(),self.img2.asImgElement()])
     
-    def getANDImage(self)->ImageElement:
+    def getANDImage(self):
         try:
             return self._andImage
         except AttributeError as e:pass 
         self._andImage = cv2.bitwise_or(self.img1.image,self.img2.image,mask=None)
         #self._andImage = ImageElement.getANDImageElement([self.img1.asImgElement(),self.img2.asImgElement()]).image
         return self._andImage
+    
+    def getXORImage(self):
+        try:
+            return self._xorImage
+        except AttributeError as e:pass 
+        self._xorImage = cv2.bitwise_not(cv2.bitwise_xor(self.img1.image,self.img2.image,mask=None),mask=None)
+        #self._andImage = ImageElement.getANDImageElement([self.img1.asImgElement(),self.img2.asImgElement()]).image
+        return self._xorImage
+    
+    def getORImage(self):
+        try:
+            return self._orImage
+        except AttributeError as e:pass 
+        self._orImage = cv2.bitwise_and(self.img1.image,self.img2.image,mask=None)
+        #self._andImage = ImageElement.getANDImageElement([self.img1.asImgElement(),self.img2.asImgElement()]).image
+        return self._orImage
+    
+    def getAllImagesFilledFlags(self)->int:
+        try:
+            return self._allImagesFilledFlags
+        except AttributeError as e:pass 
+        flags = 0
+        for imgElements in [self.img1Elements,self.img2Elements]:
+            for e in imgElements:
+                if e.isFilledImage():
+                    flags |= 1
+                else:
+                    flags |= 2
+                if flags==3: break    
+            if flags==3: break        
+        self._allImagesFilledFlags = flags    
+        return flags 
 
 # End class Images2
 
@@ -1915,14 +1989,58 @@ class Images3:
     #
     # @return 1: A and B == C
     #
-    def getANDMatched(self)->int:
+    def getBitOPMatched(self)->int:
         try:
             return self._andMatched
-        except AttributeError as e:pass  
+        except AttributeError as e:pass 
+        self._andMatched = 0 
         imgsAB = self.agent.getImages2(self.imgId1+self.imgId2) 
         diffRatio,diffCount,_ = countImageDiffRatio(imgsAB.getANDImage(),self.agent.getImage(self.imgId3))
         #print("[%s - %s] diffRatio=%f,diffCount=%d" %(imgsAB.name,self.imgId2,diffRatio,diffCount))
-        return diffRatio<0.01                               
+        if diffRatio<0.01 :
+            self._andMatched = 1
+            return self._andMatched
+        diffRatio,diffCount,_ = countImageDiffRatio(imgsAB.getXORImage(),self.agent.getImage(self.imgId3))
+        #print("[%s - %s] diffRatio=%f,diffCount=%d" %(imgsAB.name,self.imgId2,diffRatio,diffCount))
+        if diffRatio<0.01 :
+            self._andMatched = 2
+            return self._andMatched
+        
+        diffRatio,diffCount,_ = countImageDiffRatio(imgsAB.getORImage(),self.agent.getImage(self.imgId3))
+        #img3 = self.agent.getImage1(self.imgId3)
+        #count3 = countImageDiffCaseNeighbor(imgsAB.getORImage(),self.agent.getImage(self.imgId3)) 
+        #print("[%s - %s] diffRatio=%f,diffCount=%d %s.blackPixelCount = %d; %d" %(imgsAB.name,self.imgId2,diffRatio,diffCount,img3.name,img3.asImgElement().blackPixelCount,count3))
+        #print("[OR-%s  %s] diffRatio=%f,diffCount=%d" %(imgsAB.name,self.imgId2,diffRatio,diffCount))
+        if diffRatio<0.01 :
+            self._andMatched = 3
+            return self._andMatched
+        elif diffRatio<0.07 :
+            # Challenge E-02","ABC" 比较的结果 , 0.044187;  DEF : 0.064184 ; 使用 countImageDiffCaseNeighbor 
+            countDiffCaseNeighbor = countImageDiffCaseNeighbor(imgsAB.getORImage(),self.agent.getImage(self.imgId3)) 
+            #print("[OR-%s  %s] countDiffCaseNeighbor = %d" %(imgsAB.name,self.imgId2,countDiffCaseNeighbor))
+            if countDiffCaseNeighbor<=30:   
+                # Challenge E-02 : GH7 countDiffCaseNeighbor==26
+                self._andMatched = 3
+                return self._andMatched
+        return self._andMatched    
+    
+    def getAllImagesFilledFlags(self)->int:
+        try:
+            return self._allImagesFilledFlags
+        except AttributeError as e:pass 
+        flags = 0
+        for imgElements in [self.img1Elements,self.img2Elements,self.img3Elements]:
+            for e in imgElements:
+                if e.isFilledImage():
+                    flags |= 1
+                else:
+                    flags |= 2
+                if flags==3: break    
+            if flags==3: break        
+        self._allImagesFilledFlags = flags    
+        return flags 
+    
+                              
  
 # END class Images3   
      
@@ -2148,12 +2266,17 @@ class Agent:
         #  Challenge Problem B-04 : 区答案 3,4
         #     
         if caseCheckFilled:
+            filledFlags =  imgsFrm1.getAllImagesFilledFlags()
+            if (filledFlags==1 or filledFlags==2) and filledFlags==imgsFrm2.getAllImagesFilledFlags():
+                scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两组元素全为填充图" if filledFlags==1 else "两组元素全为非填充图") 
+            """
             filledFlags =  ImageElement.getImagesFilledFlags(imgsFrm1.img1Elements) #[elementIdx].isFilledImage()
             if (filledFlags==1 or filledFlags==2 )  \
                 and filledFlags==ImageElement.getImagesFilledFlags(imgsFrm2.img1Elements) \
                 and filledFlags==ImageElement.getImagesFilledFlags(imgsFrm1.img2Elements) \
                 and filledFlags==ImageElement.getImagesFilledFlags(imgsFrm2.img2Elements) :
                     scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两组元素全为填充图" if filledFlags==1 else "两组元素全为非填充图") 
+            """            
 
         #
         # Challenge Problem B-04 : 区答案 4,6
@@ -2207,7 +2330,7 @@ class Agent:
         caseXorEq = True
         caseOuterSharpCmp = True  # 判断外形  
         caseXorCmp = True
-        caseAndCmp = True
+        caseBitOPCmp = True  # a and b==c, a xor b==c 等
         caseCheckEqsIgnoreInced = True
         #  
         # 判断 两组 图片 为 相同组合 或 完成 相同
@@ -2223,7 +2346,7 @@ class Agent:
             caseXorEq = False
             caseOuterSharpCmp = False
             caseXorCmp = False
-            caseAndCmp = False
+            caseBitOPCmp = False
             caseCheckEqsIgnoreInced = False
             if self.getImages2(imgs2Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs2Name[1:3]).isImgElementsEqualsOrSimilar():
                 # GH? 图形相同, ABC 也相同 ( 因为 同组合 )
@@ -2350,7 +2473,7 @@ class Agent:
                     scoreAddTo.addScore( 10*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为90度旋转关系")
                     caseAddOrSubEq = False
                     caseXorEq = False
-                    caseAndCmp = False
+                    caseBitOPCmp = False
                     continue
                 if   imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
                   and self.getImages2(imgs1Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
@@ -2359,14 +2482,14 @@ class Agent:
                     scoreAddTo.addScore( 10*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为-90度旋转关系")
                     caseAddOrSubEq = False
                     caseXorEq = False
-                    caseAndCmp = False
+                    caseBitOPCmp = False
                     continue
                 imgsAC = self.getImages2(imgs1Name[0:1]+imgs1Name[2:3])
                 if (imgsAC.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) and self.getImages2(imgs2Name[0:1]+imgs2Name[2:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) )\
                        or (imgsAC.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) and self.getImages2(imgs2Name[0:1]+imgs2Name[2:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3)) :
                     caseAddOrSubEq = False
                     caseXorEq = False
-                    caseAndCmp = False
+                    caseBitOPCmp = False
                     # 
                     if imgsAB.isBlackPixelRatioEquals(i) and self.getImages2(imgs2Name[0:2]).isBlackPixelRatioEquals(i) : # todo 需要判断 满足 45 度的旋转 ,暂时 使用 isBlackPixelRatioEquals 代替
                         # Challenge D-02 :  [CDH-AE2]两组图形为45度旋转关系 : 判断错误, 暂时 降为 4 分
@@ -2405,7 +2528,22 @@ class Agent:
                     break
                 idxOfImgs2.append(j)
             if len(idxOfImgs2)==3:
-                scoreAddTo.addScore( 3,imgs1Name,imgs2Name,"两组图形外形具有相同组合") #D-09
+                score = 3
+                filledFlags1 =  imgsFrm1.getAllImagesFilledFlags()
+                #print("%s - %s : filledFlags = %d,%d" %(imgsFrm1.name,imgsFrm2.name,filledFlags,imgsFrm2.getAllImagesFilledFlags() ))
+                desc2 = ""
+                if (filledFlags1==1 or filledFlags1==2) :
+                    filledFlags2 =  imgsFrm2.getAllImagesFilledFlags()                                                             
+                    #if filledFlags2==filledFlags1:
+                    #    score += 1
+                    #    desc2 = ",且两组元素全为填充图" if filledFlags1==1 else ",且两组元素全为非填充图"
+                    #elif 
+                    if filledFlags2==1 or filledFlags2==2:
+                        score += 0.5
+                        desc2 = ",且两组元素全为填充图或非填充图 "  # D-08 : 
+                    # D-08 : 区分 1,4
+                # 全为  Fillded
+                scoreAddTo.addScore( score*scoreWeight,imgs1Name,imgs2Name,"两组图形外形具有相同组合"+desc2) #D-09
             
         #
         #  考虑 是否新增了相同的元素  : D-2
@@ -2427,7 +2565,7 @@ class Agent:
                     break
                 idxOfImgs2.append(j)  # imgs1Name[j]==imgs2Name[i]
             if len(idxOfImgs2)==3:
-                scoreAddTo.addScore( 10,imgs1Name,imgs2Name,"两组图形具有相同组合,并同时增加相同个数(%d)元素,对应序号=%s" %(inced0,idxOfImgs2))
+                scoreAddTo.addScore( 10*scoreWeight,imgs1Name,imgs2Name,"两组图形具有相同组合,并同时增加相同个数(%d)元素,对应序号=%s" %(inced0,idxOfImgs2))
                 pass    
         #
         # 三个图形 异或 后, 相同  : D-09
@@ -2438,22 +2576,27 @@ class Agent:
             ratio,_,_ = countImageDiffRatio(xorImg1.image,xorImg2.image)
             #print("------%s - %s : xorImgDiffRatio = %s" %(xorImg1.name,xorImg2.name,ratio))
             if ratio<0.03:
-                scoreAddTo.addScore( 3 ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
-                #caseAndCmp = False  
+                scoreAddTo.addScore( 3*scoreWeight ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
+                #caseBitOPCmp = False  
                 #caseAddOrSubEq = False
             elif ratio<0.05:
-                scoreAddTo.addScore( 1 ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
-                #caseAndCmp = False 
+                scoreAddTo.addScore( 1*scoreWeight ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
+                #caseBitOPCmp = False 
                 #caseAddOrSubEq = False
             
             #if ratio<0.07:
             #    scoreAddTo.addScore( 3 if ratio<0.03 else ( 2 if ratio<0.05 else 1),imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
 
-        if caseAndCmp:
-            andMatched = imgsFrm1.getANDMatched() 
-            if andMatched>0 and imgsFrm2.getANDMatched()==andMatched:
-                if andMatched==1:
-                    scoreAddTo.addScore( 5 ,imgs1Name,imgs2Name,"两组图形 %s 位与 %s == %s 且 %s 位与 %s==%s" %(imgsFrm1.imgId1,imgsFrm1.imgId2,imgsFrm1.imgId3,imgsFrm2.imgId1,imgsFrm2.imgId2,imgsFrm2.imgId3)) 
+        if caseBitOPCmp:
+            # E-10 
+            bitopMatched = imgsFrm1.getBitOPMatched() 
+            if bitopMatched>0 and imgsFrm2.getBitOPMatched()==bitopMatched:
+                if bitopMatched==1:
+                    scoreAddTo.addScore( 5*scoreWeight ,imgs1Name,imgs2Name,"两组图形 %s bitand %s == %s 且 %s bitand %s==%s" %(imgsFrm1.imgId1,imgsFrm1.imgId2,imgsFrm1.imgId3,imgsFrm2.imgId1,imgsFrm2.imgId2,imgsFrm2.imgId3)) 
+                elif bitopMatched==2:
+                    scoreAddTo.addScore( 5*scoreWeight ,imgs1Name,imgs2Name,"两组图形 %s bitxor %s == %s 且 %s bitxor %s==%s" %(imgsFrm1.imgId1,imgsFrm1.imgId2,imgsFrm1.imgId3,imgsFrm2.imgId1,imgsFrm2.imgId2,imgsFrm2.imgId3)) 
+                elif bitopMatched==3:
+                    scoreAddTo.addScore( 5*scoreWeight ,imgs1Name,imgs2Name,"两组图形 %s bitor %s == %s 且 %s bitor %s==%s" %(imgsFrm1.imgId1,imgsFrm1.imgId2,imgsFrm1.imgId3,imgsFrm2.imgId1,imgsFrm2.imgId2,imgsFrm2.imgId3)) 
         
         #
         # 是否 匹配 相加 属性 或 相减
@@ -2498,17 +2641,31 @@ class Agent:
 
         #
         #  比较 像素 变化规律: AB , BC , AC
-        #             
+        #    r1 in [A/B , B/C , A/C] 
+        #    r2 in [G/H , H/I,  G/I]     
+        #          
+        maxImgPixelRatio = 0  
+        for r1,r2 in zip(imgsFrm1.getImagePixelRatio(),imgsFrm2.getImagePixelRatio()):
+            diff =  abs(r1 - r2)
+            if diff>maxImgPixelRatio: maxImgPixelRatio = diff
+        if  maxImgPixelRatio< 0.05:
+            scoreAddTo.addScore(3*scoreWeight,imgs1Name,imgs2Name,"两图片像素变化率相差<0.05") 
+        elif maxImgPixelRatio < 0.1:
+            scoreAddTo.addScore(2*scoreWeight,imgs1Name,imgs2Name,"两图片像素变化率相差<0.1") 
+        elif maxImgPixelRatio < 0.15:
+            scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两图片像素变化率相差<0.15") 
+        """
         for r1,r2,id1,id2 in zip(imgsFrm1.getImagePixelRatio(),imgsFrm2.getImagePixelRatio(),[imgs1Name[0:2],imgs1Name[1:3],imgs1Name[0:1]+imgs1Name[2:3]],[imgs2Name[0:2],imgs2Name[1:3],imgs2Name[0:1]+imgs2Name[2:3]]):
             diff =  abs(r1 - r2)
             #if diff<0.15:
             #    print("diff = %f" %diff)
             if  diff< 0.05:
-                scoreAddTo.addScore(3,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.05"%(id1,id2)) 
+                scoreAddTo.addScore(3*scoreWeight,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.05"%(id1,id2)) 
             elif diff < 0.1:
-                scoreAddTo.addScore(2,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.1"%(id1,id2)) 
+                scoreAddTo.addScore(2*scoreWeight,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.1"%(id1,id2)) 
             elif diff < 0.15:
-                scoreAddTo.addScore(1,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.15"%(id1,id2)) 
+                scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两图片(%s与%s)像素个数变化率相差<0.15"%(id1,id2)) 
+        """        
         #
         # XOR 的例子: D-11
         # 
