@@ -510,6 +510,19 @@ def test_getORImage(problemId:str,imgs2Id:str)->None:
     CV2Utils.printImage1(orImg)    
     cv2.imwrite('/temp/1.jpg',orImg) 
 
+def test_allElementsInCenter1(problemId:str,imgIdLst:str)->None:
+    agent = prepareAgent(problemId) 
+    for imgId in imgIdLst:
+        img = agent.getImage1(imgId)
+        print("[%s] %s : allElementsInCenter=%s ; %s " %(problemId,img.name,img.allElementsInCenter(),img.getElementsCenterDistanceXY())) 
+
+def test_getAllElementsInLine(problemId:str,imgIdLst:str)->None:
+    agent = prepareAgent(problemId) 
+    for imgId in imgIdLst:
+        img = agent.getImage1(imgId)
+        print("[%s] %s : allElementsInLine=%d " %(problemId,img.name,img.getAllElementsInLine())) 
+
+
 def tmpTestImage()->None:    
     problemId = "Challenge E-02"
     agent = prepareAgent(problemId) 
@@ -689,6 +702,9 @@ def main():
     #test_getBitOPMatched("Challenge E-02","DEF") #andMatched=3
     #test_getBitOPMatched("Challenge E-02","GH7") #andMatched=3
     
+    #test_allElementsInCenter1("Challenge C-10","CF35BA")
+    #test_getAllElementsInLine("Challenge C-10","CF3ADG")
+
     #tmpTestImage()
 
     #testAgentSolve("B-05")
@@ -746,13 +762,14 @@ def main():
     #testAgentSolve("C-12") # ??? 结果 = 7 (!!!期望结果 =8) ;  test2:3
 
 
-    testAgentSolve("E-12") # ??? 结果 = 5 (!!!期望结果 =6)
+    #testAgentSolve("E-12") # ????? 结果 = 5 (!!!期望结果 =6) ; test2 ok
 
     
-    #testAgentSolve("Challenge C-08")
-    #testAgentSolve("Challenge C-10")
+    #testAgentSolve("Challenge C-08") # 整体对称, 同 C-8 结果 = 4 (!!!期望结果 =5) ; test2:7
+    #***********testAgentSolve("Challenge C-10")
+    #******testAgentSolve("Challenge C-12") # ???? 结果 = 7 (!!!期望结果 =8) ;  test2:4
 
-    #testAgentSolve("Challenge D-04") #??
+    #********testAgentSolve("Challenge D-04") #??
     #testAgentSolve("Challenge D-05") #??
     #testAgentSolve("Challenge D-06")
     #testAgentSolve("Challenge D-07")
@@ -789,7 +806,7 @@ def main():
     #testSolveProblemSet("Basic Problems E") # 3X3          3 
     #testSolveProblemSet("Challenge Problems C")  # 3X3
     #testSolveProblemSet("Challenge Problems D")  # 3X3
-    #testSolveProblemSet("Challenge Problems E")  # 3X3
+    testSolveProblemSet("Challenge Problems E")  # 3X3
     return
 
     

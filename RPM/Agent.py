@@ -8,7 +8,7 @@ from itertools import product
 APPPATH = os.path.dirname(__file__)
 
 THRESHOLD = 1
-
+# threshod 
 #SAMEIMG_THRESHOLD = 0.03 
 SAMEIMG_THRESHOLD = 0.015 
 
@@ -292,7 +292,7 @@ class ImageElement:
     def  getSize(self):
         return (self.ey-self.y0,self.ex-self.x0)
     def  getCenter(self):
-        return (self.ex+self.x0)/2,(self.ey+self.y0)/2
+        return (self.ex+self.x0-1)/2,(self.ey+self.y0-1)/2
     def getWidth(self):
         return self.ex-self.x0
     def getHeight(self):
@@ -1076,6 +1076,70 @@ class ImageElement:
             sum += y
         return sum / len(elements)    
     
+    def allElementsInCenter(elements:list,threshod:int=4)->bool:
+        for e in elements:
+            height, width = e.image.shape
+            x0,y0 = e.getCenter()
+            #print( "%s : x=%f %f y=%f %f" %(e.name,x0,width/2,y0,height/2) )
+            if abs(x0-width/2)>threshod or abs(y0-height/2)>threshod: return False
+        return True
+    
+    #
+    #  
+    #  1 : 在同一个 横线上
+    #  2 : 在同一个 纵线上
+    #  3 : 在同一个 中线
+    #  4 : 在同一个 斜线 上  , -45 度
+    #  5 : 在同一个 斜线 上  , 45 度
+    #
+    def getAllElementsInLine(elements)->int:
+        if len(elements)==0: return 0
+        #height, width = elements[0].image.shape
+        x0 = sum(map(lambda e:(e.x0+e.ex-1)/2,elements)) / len(elements)
+        y0 = sum(map(lambda e:(e.y0+e.ey-1)/2,elements)) / len(elements)
+        #print("x0=%f y0=%f" %(x0,y0))
+        #for e in elements:
+        #    dx, dy = (e.x0+e.ex-1)/2-x0 , (e.y0+e.ey-1)/2-y0 
+            #x0 +=  (e.x0+e.ex-1)/2
+            #y0 +=  (e.y0+e.ey-1)/2
+            #print(" %s :  中线点=%f %f " %(e.name,(e.x0+e.ex-1)/2,(e.y0+e.ey-1)/2))
+            #print(" %s : dx=%f dy=%f, 中线点=%f %f " %(e.name,dx,dy,(e.x0+e.ex-1)/2,(e.x0+e.ex-1)/2))
+        v0 = 0
+        for e in elements:
+            dx, dy = (e.x0+e.ex-1)/2-x0 , (e.y0+e.ey-1)/2-y0 
+            #print(" %s : dx=%f dy=%f, 中线点=%f %f " %(e.name,dx,dy,(e.x0+e.ex-1)/2,(e.x0+e.ex-1)/2))
+            if abs(dx)<=4 :
+                v = 3 if abs(dy)<=4 else 2
+            elif abs(dy)<=4 : 
+                v = 1
+            elif abs(dx-dy)<=4:
+                v = 4
+            elif abs(dx+dy)<=4:
+                v = 5
+            else:
+                return 0
+            #print(" %s : v=%d, v0=%d" %(e.name,v,v0))
+            if v0==0: v0 = v
+            if v0==v or v==3:
+               continue
+            if v0==3:
+               v0 = v
+            else:
+                return 0 
+        return v0
+    
+    #
+    # 距离 中心点的 位置
+    #  [ (dy,dx),(dy,dx),...]
+    #
+    def getElementsCenterDistanceXY(elements:list)->list:
+        distance = []
+        for e in elements:
+            height, width = e.image.shape
+            x0,y0 = e.getCenter()
+            distance.append((x0-width/2,y0-height/2))
+        return distance    
+    
     #def isBlackPixel(self,x:int,y:int,relativeXY0:bool=True):
     #    if relativeXY0:
     #        x += self.x0
@@ -1172,7 +1236,35 @@ class ImageElement:
                     break
         ImageElement.cached[cacheKey] = imgElement
         return imgElement
-    """   
+    """ 
+    #
+    #  当前元素位置 与 otherElement 的 位置关系
+    #     1:  self 包含在 otherElement 中
+    #     2 : otherElement  包含在 self 中
+    #     3  : 相交
+    #     0  :  分离
+    #   
+    def getElementPosRel(self,otherElement)->bool:
+        cacheKey = "ElementPosRel("+self.name+","+otherElement.name+")"
+        if cacheKey in ImageElement.cached:
+            #print("[getImageElementSimilarScale]使用缓存 %s" % cacheKey)
+            return ImageElement.cached[cacheKey]
+        rel = 0
+        if  self.x0>otherElement.x0 and self.ex<otherElement.ex and self.y0>otherElement.y0 and self.ey<otherElement.ey:
+            rel = 1 # self 包含在 otherElement 中
+        elif self.x0<otherElement.x0 and self.ex>otherElement.ex and self.y0<otherElement.y0 and self.ey>otherElement.ey:
+            rel = 2
+        elif    (self.x0>otherElement.x0 and self.x0<otherElement.ex) \
+            or  (self.ex>otherElement.x0 and self.ex<otherElement.ex) \
+            or  (self.y0>otherElement.y0 and self.x0<otherElement.ey) \
+            or  (self.ey>otherElement.y0 and self.ex<otherElement.ey) :
+                rel = 3
+        ImageElement.cached[cacheKey] = rel
+        return  rel
+    
+    
+
+        
 
 # END class ImageElement
 
@@ -1454,6 +1546,29 @@ class Image1:
         self._elementsWidth = ex-x0       
         return self._elementsWidth      
 
+    def allElementsInCenter(self,threshod:int=4)->bool:
+        try:
+            return self._allElementsInCenter
+        except AttributeError as e:
+            pass
+        self._allElementsInCenter = ImageElement.allElementsInCenter(self.getImageElements())
+        return self._allElementsInCenter
+    
+    def getElementsCenterDistanceXY(self)->list:
+        try:
+            return self._elementsCenterDistanceXY
+        except AttributeError as e:
+            pass
+        self._elementsCenterDistanceXY = ImageElement.getElementsCenterDistanceXY(self.getImageElements())
+        return self._elementsCenterDistanceXY
+    
+    def getAllElementsInLine(self)->int:
+        try:
+            return self._allElementsInLine
+        except AttributeError as e:
+            pass
+        self._allElementsInLine = ImageElement.getAllElementsInLine(self.getImageElements())
+        return self._allElementsInLine
 
 #END class Image1
 
@@ -2339,7 +2454,7 @@ class Agent:
         #
         if len(idxOfImgs2)==3:
             #print("%s-%s : idxOfImgs2 = %s" %(imgs1Name,imgs2Name,idxOfImgs2))
-            score = 10
+            score = 7  # 10 降为 7 Challenge D-04 : [DEF-GH2] 
             desc = "两组图形具有相同组合"  
             #scoreAddTo.addScore(10 * scoreWeight ,imgs1Name,imgs2Name,"两组图形具有相同组合")
             caseAddOrSubEq = False
@@ -2349,7 +2464,7 @@ class Agent:
             caseBitOPCmp = False
             caseCheckEqsIgnoreInced = False
             if self.getImages2(imgs2Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs2Name[1:3]).isImgElementsEqualsOrSimilar():
-                # GH? 图形相同, ABC 也相同 ( 因为 同组合 )
+                # GH? 图形相同, ABC 也相同 ( 因为 同组合 ) : A==B and B==C
                 if self.getImages2(imgs2Name[0:2]).isImgElementsEquals() and self.getImages2(imgs2Name[1:3]).isImgElementsEquals():
                     score += 12
                     desc = "两组图形6个全相同"  
@@ -2358,6 +2473,22 @@ class Agent:
                     desc = "两组图形6个全相似"  
                 #scoreAddTo.addScore(10 * scoreWeight ,imgs1Name,imgs2Name,"两组图形6个全相同")
                 all6ImgEquals = True
+            elif idxOfImgs2[0]==0 and idxOfImgs2[1]==1 and idxOfImgs2[2]==2:
+                score += 3
+                desc +=",且 %s==%s,%s==%s,%s==%s " %(imgs1Name[0],imgs2Name[0],imgs1Name[1],imgs2Name[1],imgs1Name[2],imgs2Name[2])
+                #
+                # getAllElementsInLine  : Challenge C-10 区分 2,3
+                # 
+                if imgsFrm2.img1.getAllElementsInLine()==3 and imgsFrm2.img2.getAllElementsInLine()==3 and imgsFrm2.img3.getAllElementsInLine()==3:
+                    frm1InLine1 = imgsFrm1.img1.getAllElementsInLine()
+                    frm1InLine2 = 0 if frm1InLine1<=0 else imgsFrm1.img2.getAllElementsInLine()
+                    frm1InLine3 = 0 if frm1InLine1<=0 or frm1InLine2<=0 else imgsFrm1.img3.getAllElementsInLine()
+                    #print("[%s %s] %d %d %d" %(imgs1Name,imgs2Name,frm1InLine1,frm1InLine2,frm1InLine3))
+                    if frm1InLine3>0 and frm1InLine3!=3:
+                        score += 1
+                        desc +=",且 %s中心在同一线上, %s中心在同一点上" %(imgs1Name,imgs2Name)
+
+             # A==G and B==H and    
             scoreAddTo.addScore(score * scoreWeight ,imgs1Name,imgs2Name,desc) # C-02
         elif    self.getImages2(imgs1Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs1Name[1:3]).isImgElementsEqualsOrSimilar() \
             and self.getImages2(imgs2Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs2Name[1:3]).isImgElementsEqualsOrSimilar():
@@ -2492,8 +2623,9 @@ class Agent:
                     caseBitOPCmp = False
                     # 
                     if imgsAB.isBlackPixelRatioEquals(i) and self.getImages2(imgs2Name[0:2]).isBlackPixelRatioEquals(i) : # todo 需要判断 满足 45 度的旋转 ,暂时 使用 isBlackPixelRatioEquals 代替
-                        # Challenge D-02 :  [CDH-AE2]两组图形为45度旋转关系 : 判断错误, 暂时 降为 4 分
-                        scoreAddTo.addScore( 4*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为45度旋转关系")
+                        # Challenge D-02 :  [CDH-AE2]两组图形为45度旋转关系 : 判断错误, 
+                        # Challenge D-04 :  [ABC-GH6] : 需要 5 分 区分 答案 2
+                        scoreAddTo.addScore( 5*scoreFac* scoreWeight/nElementIfSame,imgs1Name,imgs2Name,"两组图形为45度旋转关系")
                     continue
                 #elif imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) 
         # END if nElementIfSame>0: #六个 图形 具有 相同 元素 个数
@@ -2639,6 +2771,7 @@ class Agent:
                 else:
                     scoreAddTo.addScore( 1 * scoreWeight,imgs1Name,imgs2Name,"前两图片像素个数相加或减==第三个图片")
 
+
         #
         #  比较 像素 变化规律: AB , BC , AC
         #    r1 in [A/B , B/C , A/C] 
@@ -2654,6 +2787,41 @@ class Agent:
             scoreAddTo.addScore(2*scoreWeight,imgs1Name,imgs2Name,"两图片像素变化率相差<0.1") 
         elif maxImgPixelRatio < 0.15:
             scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两图片像素变化率相差<0.15") 
+        
+        #
+        #  Challenge Problem C-10 : 区分 答案 2,3 : 
+        #   根据 包含关系 :
+        #
+        """
+        if maxImgPixelRatio<0.05 \
+               and len(imgsFrm1.img1.getImageElements())==len(imgsFrm2.img1.getImageElements()) \
+               and len(imgsFrm1.img2.getImageElements())==len(imgsFrm2.img2.getImageElements()) \
+               and len(imgsFrm1.img3.getImageElements())==len(imgsFrm2.img3.getImageElements()):
+            def distanceMatched(elements1,elements2): # 判断 到 最小元素 的距离 按 相同 规律 
+                n = len(elements1) 
+                if n!=len(elements2): return False
+                if n<=1 : return True
+                x10, y10 =  elements1[n-1].getCenter()
+                x20, y20 =  elements2[n-1].getCenter()
+                for e1,e2 in zip(elements1,elements2):
+                    x1, y1 =  e1.getCenter()
+                    x2, y2 =  e2.getCenter()
+                    dx1 = x1 - x10
+                    dy1 = y1 - y10
+                    dx2 = x2 - x20
+                    dy2 = y2 - y20
+                    if abs(dx1)<5 : dx1 = 0
+                    if abs(dx2)<5 : dx2 = 0
+                    if abs(dy1)<5 : dy1 = 0
+                    if abs(dy2)<5 : dy2 = 0
+                    print("%s : dx1=%f dy1=%f ; %s : dx2=%f dy2=%f " %(e1.name,dx1,dy1,e2.name,dx2,dy2))
+                return False    
+            if      distanceMatched(imgsFrm1.img1.getImageElements(),imgsFrm2.img1.getImageElements())  \
+                and distanceMatched(imgsFrm1.img2.getImageElements(),imgsFrm2.img2.getImageElements())  \
+                and distanceMatched(imgsFrm1.img3.getImageElements(),imgsFrm2.img3.getImageElements()):
+                scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两图片元素位置(距离)有相同规律") 
+        """
+
         """
         for r1,r2,id1,id2 in zip(imgsFrm1.getImagePixelRatio(),imgsFrm2.getImagePixelRatio(),[imgs1Name[0:2],imgs1Name[1:3],imgs1Name[0:1]+imgs1Name[2:3]],[imgs2Name[0:2],imgs2Name[1:3],imgs2Name[0:1]+imgs2Name[2:3]]):
             diff =  abs(r1 - r2)
