@@ -343,6 +343,7 @@ def testImageElementSimilarScale(problemId,imgId1,imgId2,elementdx1=0,elementdx2
     img1 = getImageElement(agent,imgId1,elementdx1)
     printImageElement(img1,problemId)
     img2 = getImageElement(agent,imgId2,elementdx2)
+    printImageElement(img2,problemId)
     similar,similar2,pixMatched,scale = img1.getImageElementSimilarScale(img2)
     print("[%s] 中 %s.%d 与 %s.%d 相似(similar) = %f similar2=%f pixMatched=%s, 比例 = %f" %(problemId,imgId1,elementdx1,imgId2,elementdx2,similar,similar2,pixMatched,scale))    
     #similar1,scale1 = img1.getImageElementSimilarScale(img2)
@@ -522,17 +523,59 @@ def test_getAllElementsInLine(problemId:str,imgIdLst:str)->None:
         img = agent.getImage1(imgId)
         print("[%s] %s : allElementsInLine=%d " %(problemId,img.name,img.getAllElementsInLine())) 
 
+def test_getImgElementsEqualsIdxMap(problemId:str,imgs2Id:str)->None:
+    agent = prepareAgent(problemId) 
+    img = agent.getImages2(imgs2Id)
+    print("[%s] %s : ImgElementsEqualsIdxMap = %s" %(problemId,img.name,img.getImgElementsEqualsIdxMap()))
+    print("---[%s] %s : ImgElementsEqualsIdxMap = %s" %(problemId,img.name,img.getImgElementsEqualsIdxMap()))
+
+def test_isEqualsByElementIdx(problemId:str,imgsId:str,elementIdx=0):    
+    agent = prepareAgent(problemId) 
+    img = agent.getImages3(imgsId)
+    #print("[%s] %s[%d] : imgsElements.len = %d %d %d" %(problemId,img.name,elementIdx,len(img.img1Elements),len(img.img2Elements),len(img.img3Elements)))
+    print("[%s] %s[%d] : isEqualsByElementIdx = %s" %(problemId,img.name,elementIdx,img.isEqualsByElementIdx(elementIdx)))
+
+def test_getOnlyNotEqElementIdx(problemId:str,imgsId:str):
+    agent = prepareAgent(problemId) 
+    img = agent.getImages3(imgsId)
+    #print("[%s] %s[%d] : imgsElements.len = %d %d %d" %(problemId,img.name,elementIdx,len(img.img1Elements),len(img.img2Elements),len(img.img3Elements)))
+    print("[%s] %s : onlyNotEqElementIdx = %d" %(problemId,img.name,img.getOnlyNotEqElementIdx()))
+
+def test_getImgElementEqualsIdxMap(problemId:str,imgsId1:str,elementIdx1:int,imgsId2:str,elementIdx2:int)->None:
+    agent = prepareAgent(problemId) 
+    img1 = agent.getImages3(imgsId1)
+    img2 = agent.getImages3(imgsId2)
+    print("[%s] %s[%d]/%s[%d] : getImgElementEqualsIdxMap = %s" %(problemId,img1.name,elementIdx1,img2.name,elementIdx2,img1.getImgElementEqualsIdxMap(elementIdx1,img2,elementIdx2)))
+
+def test_isLinesFielldImage(problemId:str,imgsIdLst:str,elementIdx=0):
+    agent = prepareAgent(problemId) 
+    for imgsId in imgsIdLst:
+        img = agent.getImage1(imgsId)
+        print("[%s] %s : isLinesFielldImage = %s" %(problemId,img.name,img.getImageElements()[elementIdx].isLinesFielldImage()))
+
+def test_isDifferentFillMode(problemId:str,imgsId:str,elementIdx=0):
+    agent = prepareAgent(problemId) 
+    img = agent.getImages3(imgsId)
+    #print("[%s] %s[%d] : imgsElements.len = %d %d %d" %(problemId,img.name,elementIdx,len(img.img1Elements),len(img.img2Elements),len(img.img3Elements)))
+    print("[%s] %s : isDifferentFillMode = %s" %(problemId,img.name,img.isDifferentFillMode(elementIdx)))
+
 
 def tmpTestImage()->None:    
-    problemId = "Challenge E-02"
+    problemId = "Challenge D-05"
     agent = prepareAgent(problemId) 
-    imgs2Id = "AB"
+    imgs2Id = "G2"
     img = agent.getImages2(imgs2Id)
-    orImg = img.getORImage()
-    imgC = agent.getImage("C")
-    xorImg = cv2.bitwise_not(cv2.bitwise_xor(orImg,imgC,mask=None),mask=None)
-    cv2.imwrite('/temp/1.jpg',orImg) 
-    cv2.imwrite('/temp/2.jpg',xorImg) 
+    e1 = img.img1Elements[0]
+    e2 = img.img1Elements[1]
+    print( "%s %s" %(e1.isImageShapeMatched(e2),e1.isBlackPixelEquals(e2)))
+    e1 = img.img1Elements[1]
+    e2 = img.img1Elements[0]
+    print( "%s %s" %(e1.isImageShapeMatched(e2),e1.isBlackPixelEquals(e2)))
+    #orImg = img.getORImage()
+    #imgC = agent.getImage("C")
+    #xorImg = cv2.bitwise_not(cv2.bitwise_xor(orImg,imgC,mask=None),mask=None)
+    #cv2.imwrite('/temp/1.jpg',orImg) 
+    #cv2.imwrite('/temp/2.jpg',xorImg) 
         
 #
 #  D-04
@@ -618,7 +661,8 @@ def main():
     #testImageElementSimilarScale("Challenge B-07","C-ROTAGE90","6")
     #testImageElementSimilarScale("Challenge B-07","C-FLIPH","6")  #  相似 = 0.000000 0.980000 True, 比例 = 1.000000
     #testImageElementSimilarScale("D-09","B","3") #  相似 = 0.000000 1.000000 False
-    #testImageElementSimilarScale("D-09","A","1")  # 相似 = 1.000000 
+    #testImageElementSimilarScale("D-09","A","1")  # 相似 = 1.000000
+    #testImageElementSimilarScale("Challenge D-05","G","2") 
 
 
 
@@ -704,7 +748,38 @@ def main():
     
     #test_allElementsInCenter1("Challenge C-10","CF35BA")
     #test_getAllElementsInLine("Challenge C-10","CF3ADG")
-
+    #test_getImgElementsEqualsIdxMap("Challenge D-05","G2")
+    #test_getImgElementsEqualsIdxMap("Challenge D-05","G3")
+    #test_getImgElementsEqualsIdxMap("Challenge D-05","G1")
+    #test_getImgElementsEqualsIdxMap("Challenge D-05","G7")
+    #test_isEqualsByElementIdx("Challenge D-06","ABC",0) # False
+    #test_isEqualsByElementIdx("Challenge D-06","DEF",0) # True
+    #test_isEqualsByElementIdx("Challenge D-06","DEF",1) # False
+    #test_isEqualsByElementIdx("Challenge D-06","DE6",0) # False
+    #test_isEqualsByElementIdx("Challenge D-06","D13",0) #False
+    #test_isEqualsByElementIdx("Challenge D-06","GH6",0) # True
+    #test_isEqualsByElementIdx("Challenge D-06","GH6",1) # True
+    #test_isEqualsByElementIdx("Challenge D-06","GH6",2) # False
+    #test_getOnlyNotEqElementIdx("Challenge D-06","ABC") # -3
+    #test_getOnlyNotEqElementIdx("Challenge D-06","DEF") # 1
+    #test_getOnlyNotEqElementIdx("Challenge D-06","DE2") # -2
+    #test_getOnlyNotEqElementIdx("Challenge D-06","GH1") # -2 元素个数不等
+    #test_getOnlyNotEqElementIdx("Challenge D-06","GH6") #  2
+    #test_getImgElementEqualsIdxMap("Challenge D-06","DEF",1,"GH6",2) #  
+    #test_getImgElementEqualsIdxMap("Challenge D-06","DEF",1,"GH5",2) #  None
+    #test_isLinesFielldImage("Challenge D-07","B")
+    #test_isLinesFielldImage("B-07","C")   # 0
+    #test_isLinesFielldImage("Challenge B-07","C")  # 1: 水平填充
+    #test_isLinesFielldImage("Challenge B-09","AC")   # 2 : 垂直填充
+    #test_isLinesFielldImage("Challenge B-09","26")   # 3:
+    #test_isLinesFielldImage("Challenge D-07","BD524") # 3
+    #test_isLinesFielldImage("Challenge D-07","AC") # 0
+    
+    #test_isLinesFielldImage("Challenge D-07","4") 
+    #test_isDifferentFillMode("Challenge D-07","ABC")  #  True
+    #test_isDifferentFillMode("Challenge D-07","AE1")  #  False
+    #test_isDifferentFillMode("Challenge D-07","AE3")  # False
+    #test_isDifferentFillMode("Challenge D-07","AHF")  # False
     #tmpTestImage()
 
     #testAgentSolve("B-05")
@@ -724,13 +799,18 @@ def main():
     #testAgentSolve("D-03")
     #testAgentSolve("D-04")
     #testAgentSolve("D-06")
-    #testAgentSolve("D-08")
+    #testAgentSolve("D-08") #组图形外形具有相同组合, 且两组元素全为填充图或非填充图
     #testAgentSolve("D-11") #[BFG-AE3]每组图形全相等
     #testAgentSolve("D-10") 
-    #testAgentSolve("E-03") # 前两图片像素合并==第三个图片
+    #testAgentSolve("D-09") #  两组图形每组XOR后的图形相似
+    #testAgentSolve("D-10") #  [ABC-GH1]两组图形每组XOR后的图形相似
+    #testAgentSolve("D-12") 
     #testAgentSolve("E-01") #  [ABC-GH1]前两图片像素合并==第三个图片
     #testAgentSolve("E-02") #]前两图片像素合并==第三个图片
+    #testAgentSolve("E-03") # 前两图片像素合并==第三个图片
     #testAgentSolve("E-04") # 前两图片像素相减==第三个图片
+    #testAgentSolve("E-10")  # DEF/GH8   结果 = 2  (!!!期望结果 = 8) : a bitand b==c ABC-GH8]两组图形 A bitand B == C 且 G bitand H==8
+    #testAgentSolve("E-11")
     #testAgentSolve("C-06") #前两图片像素个数相加或减==第三个图片,且宽高匹配
 
     #testAgentSolve("Challenge B-01") 
@@ -745,12 +825,7 @@ def main():
     #testAgentSolve("Challenge E-01") #[ABC-GH6]两组图形 A bitxor B == C 且 G bitxor H==6
     
     #testAgentSolve("Challenge B-04") # ??? 通过是否填充判断???
-    #testAgentSolve("D-08") #组图形外形具有相同组合, 且两组元素全为填充图或非填充图
-    #testAgentSolve("D-09") #  两组图形每组XOR后的图形相似
-    #testAgentSolve("D-10") #  [ABC-GH1]两组图形每组XOR后的图形相似
-    #testAgentSolve("D-12") 
-    #testAgentSolve("E-10")  # DEF/GH8   结果 = 2  (!!!期望结果 = 8) : a bitand b==c ABC-GH8]两组图形 A bitand B == C 且 G bitand H==8
-    #testAgentSolve("E-11")
+    #testAgentSolve("Challenge D-04") #??
     #testAgentSolve("Challenge E-02")  # [ABC-GH7]两组图形 A bitor B == C 且 G bitor H==7
     #
     # 有问题
@@ -770,9 +845,9 @@ def main():
     #******testAgentSolve("Challenge C-12") # ???? 结果 = 7 (!!!期望结果 =8) ;  test2:4
 
     #********testAgentSolve("Challenge D-04") #??
-    #testAgentSolve("Challenge D-05") #??
-    #testAgentSolve("Challenge D-06")
-    #testAgentSolve("Challenge D-07")
+    #testAgentSolve("Challenge D-05") #?????未找到规则
+    #********testAgentSolve("Challenge D-06")
+    #***********testAgentSolve("Challenge D-07") #[ABC-GH4]两组图形外形具有相同组合,且两组元素各使用不同的填充模式
 
     #testAgentSolve("Challenge D-09")
     #testAgentSolve("Challenge D-10")
@@ -798,15 +873,15 @@ def main():
     #tempTest4ProblemSet("Basic Problems E")
 
     Agent._DEBUG = False
-    #testSolveProblemSet("Basic Problems B")  # 2X2
-    #testSolveProblemSet("Challenge Problems B")  # 2X2 
+    #testSolveProblemSet("Basic Problems B")  #  ok
+    #testSolveProblemSet("Challenge Problems B")  # 8
 
-    #testSolveProblemSet("Basic Problems C") # 3X3
-    #testSolveProblemSet("Basic Problems D") # 3X3
-    #testSolveProblemSet("Basic Problems E") # 3X3          3 
-    #testSolveProblemSet("Challenge Problems C")  # 3X3
-    #testSolveProblemSet("Challenge Problems D")  # 3X3
-    testSolveProblemSet("Challenge Problems E")  # 3X3
+    #testSolveProblemSet("Basic Problems C") #   : 8 ,12
+    #testSolveProblemSet("Basic Problems D") #   : ok
+    #testSolveProblemSet("Basic Problems E") #      12
+    #testSolveProblemSet("Challenge Problems C")  #  8 
+    #testSolveProblemSet("Challenge Problems D")  # 5,, 9,10,11,12
+    testSolveProblemSet("Challenge Problems E")  # 4 5 6 7 8 9 10 11 12
     return
 
     
