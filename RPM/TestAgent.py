@@ -559,18 +559,28 @@ def test_isDifferentFillMode(problemId:str,imgsId:str,elementIdx=0):
     #print("[%s] %s[%d] : imgsElements.len = %d %d %d" %(problemId,img.name,elementIdx,len(img.img1Elements),len(img.img2Elements),len(img.img3Elements)))
     print("[%s] %s : isDifferentFillMode = %s" %(problemId,img.name,img.isDifferentFillMode(elementIdx)))
 
+def test_isOuterSimilarAllElements(problemId:str,imgId1,imgId2):
+    agent = prepareAgent(problemId) 
+    img1 = agent.getImage1(imgId1)
+    img2 = agent.getImage1(imgId2)
+    v = img1.getImageElements()[0].isOuterSimilarAllElements(img2.getImageElements())
+    print("[%s] %s-%s : isOuterSimilarAllElements = %s" %(problemId,img1.name,img2.name,v))
 
 def tmpTestImage()->None:    
-    problemId = "Challenge D-05"
+    problemId = "Challenge D-09"
     agent = prepareAgent(problemId) 
-    imgs2Id = "G2"
-    img = agent.getImages2(imgs2Id)
-    e1 = img.img1Elements[0]
-    e2 = img.img1Elements[1]
-    print( "%s %s" %(e1.isImageShapeMatched(e2),e1.isBlackPixelEquals(e2)))
-    e1 = img.img1Elements[1]
-    e2 = img.img1Elements[0]
-    print( "%s %s" %(e1.isImageShapeMatched(e2),e1.isBlackPixelEquals(e2)))
+    img1 = agent.getImages3("ABC")
+    img2 = agent.getImages3("GH7")
+    img1XOR = img1.getXORImageElement()
+    img2XOR = img2.getXORImageElement()
+    cv2.imwrite('/temp/1.jpg',img1XOR.image) 
+    cv2.imwrite('/temp/2.jpg',img2XOR.image) 
+    #e1 = img.img1Elements[0]
+    #e2 = img.img1Elements[1]
+    #print( "%s %s" %(e1.isImageShapeMatched(e2),e1.isBlackPixelEquals(e2)))
+    #e1 = img.img1Elements[1]
+    #e2 = img.img1Elements[0]
+    #print( "%s %s" %(e1.isImageShapeMatched(e2),e1.isBlackPixelEquals(e2)))
     #orImg = img.getORImage()
     #imgC = agent.getImage("C")
     #xorImg = cv2.bitwise_not(cv2.bitwise_xor(orImg,imgC,mask=None),mask=None)
@@ -605,6 +615,7 @@ def testSolveProblemSet(setName:str):
     agent = Agent()
     totalProblems = 0
     correctProblems = 0
+    errProblems = []
     for problem in problemSet.problems:   # Your agent will solve one problem at a time.
             #try:
         answer = agent.Solve(problem)  # The problem will be passed to your agent as a RavensProblem object as a parameter to the Solve method
@@ -613,12 +624,13 @@ def testSolveProblemSet(setName:str):
         answerInfo = ""
         if answer!=problem.correctAnswer and problem.correctAnswer>0:
             answerInfo = "(!!!期望结果 =%d)" % problem.correctAnswer
+            errProblems.append(problem.name[-2:])
         else:
             correctProblems += 1    
         print("[%s] : 结果 = %d %s\n" % (problem.name, answer,answerInfo))
         totalProblems += 1
         #print("%s . %s : 结果 = %d %s\n" % (set.name, problem.name, answer,answerInfo))
-    print("[%s] %d/%d , 耗时=%f" %(setName,correctProblems,totalProblems,(time()-startTime)))
+    print("[%s] %d/%d , 耗时=%f %s" %(setName,correctProblems,totalProblems,(time()-startTime),"" if len(errProblems)==0 else "错误:"+",".join(errProblems)))
     
 def main():
     Agent._DEBUG = True
@@ -639,6 +651,7 @@ def main():
     #showSplitImages("C-09","C")
     #showSplitImages("C-09","2")
     #showSplitImages("Challenge E-02","A")
+    #showSplitImages("Challenge D-09","C")
     #testFlipImage("B-03","A") # ** 
     #testFlipImage("B-07","9") 
     #testFlipImage("B-05","A") 
@@ -663,6 +676,9 @@ def main():
     #testImageElementSimilarScale("D-09","B","3") #  相似 = 0.000000 1.000000 False
     #testImageElementSimilarScale("D-09","A","1")  # 相似 = 1.000000
     #testImageElementSimilarScale("Challenge D-05","G","2") 
+    #testImageElementSimilarScale("Challenge D-10","A","C",0,0) 
+    #testImageElementSimilarScale("Challenge D-10","A","C",0,1) 
+    #testImageElementSimilarScale("Challenge D-10","A","C",0,2) 
 
 
 
@@ -774,12 +790,16 @@ def main():
     #test_isLinesFielldImage("Challenge B-09","26")   # 3:
     #test_isLinesFielldImage("Challenge D-07","BD524") # 3
     #test_isLinesFielldImage("Challenge D-07","AC") # 0
+    #test_isLinesFielldImage("Challenge D-09","C")
     
     #test_isLinesFielldImage("Challenge D-07","4") 
     #test_isDifferentFillMode("Challenge D-07","ABC")  #  True
     #test_isDifferentFillMode("Challenge D-07","AE1")  #  False
     #test_isDifferentFillMode("Challenge D-07","AE3")  # False
     #test_isDifferentFillMode("Challenge D-07","AHF")  # False
+    
+    #test_isOuterSimilarAllElements("Challenge D-10","A","C")
+
     #tmpTestImage()
 
     #testAgentSolve("B-05")
@@ -808,7 +828,7 @@ def main():
     #testAgentSolve("E-01") #  [ABC-GH1]前两图片像素合并==第三个图片
     #testAgentSolve("E-02") #]前两图片像素合并==第三个图片
     #testAgentSolve("E-03") # 前两图片像素合并==第三个图片
-    #testAgentSolve("E-04") # 前两图片像素相减==第三个图片
+    #testAgentSolve("E-04") # [ADG-CF8]前两图片像素个数相加或减==第三个图片,且宽高匹配
     #testAgentSolve("E-10")  # DEF/GH8   结果 = 2  (!!!期望结果 = 8) : a bitand b==c ABC-GH8]两组图形 A bitand B == C 且 G bitand H==8
     #testAgentSolve("E-11")
     #testAgentSolve("C-06") #前两图片像素个数相加或减==第三个图片,且宽高匹配
@@ -821,6 +841,7 @@ def main():
     #testAgentSolve("Challenge B-06")   #  相等比较时, 斜线段 较多
     #testAgentSolve("Challenge B-07")   #  相等比较时,  需要考虑 match2 轮廓相似:[AB-C6]元素0匹配相同变换FLIPH(仅轮廓相似)
     #testAgentSolve("Challenge B-10")  #  
+    #testAgentSolve("Challenge C-12") # [ABC-GH2]两组图形外形具有相同组合,且两组元素大小匹配
     #testAgentSolve("Challenge D-02")  #  
     #testAgentSolve("Challenge E-01") #[ABC-GH6]两组图形 A bitxor B == C 且 G bitxor H==6
     
@@ -849,12 +870,12 @@ def main():
     #********testAgentSolve("Challenge D-06")
     #***********testAgentSolve("Challenge D-07") #[ABC-GH4]两组图形外形具有相同组合,且两组元素各使用不同的填充模式
 
-    #testAgentSolve("Challenge D-09")
-    #testAgentSolve("Challenge D-10")
-    #testAgentSolve("Challenge D-11")
-    #testAgentSolve("Challenge D-12")
+    #***********testAgentSolve("Challenge D-09")
+    #***********testAgentSolve("Challenge D-10") # [ADG-CF5]第一组中三个图片分别等于第二组中三个图片的每个元素
+    #testAgentSolve("Challenge D-11") #?????未找到规则
+    #**********testAgentSolve("Challenge D-12") # [ABC-GH6]两组元素个数(不考虑次序的情况下)匹配
 
-    #testAgentSolve("Challenge E-04")
+    testAgentSolve("Challenge E-04")
     #testAgentSolve("Challenge E-05")
     #testAgentSolve("Challenge E-06")
     #testAgentSolve("Challenge E-07")
@@ -876,12 +897,12 @@ def main():
     #testSolveProblemSet("Basic Problems B")  #  ok
     #testSolveProblemSet("Challenge Problems B")  # 8
 
-    #testSolveProblemSet("Basic Problems C") #   : 8 ,12
+    #testSolveProblemSet("Basic Problems C") #   : 08 ,12
     #testSolveProblemSet("Basic Problems D") #   : ok
     #testSolveProblemSet("Basic Problems E") #      12
     #testSolveProblemSet("Challenge Problems C")  #  8 
-    #testSolveProblemSet("Challenge Problems D")  # 5,, 9,10,11,12
-    testSolveProblemSet("Challenge Problems E")  # 4 5 6 7 8 9 10 11 12
+    #testSolveProblemSet("Challenge Problems D")  # 5,, 11
+    #testSolveProblemSet("Challenge Problems E")  # 4 5 6 7 8 9 10 11 12
     return
 
     
@@ -896,12 +917,16 @@ def main():
 
 def tempTest():
     #agent = prepareAgent("B-06")
-    agent = prepareAgent("Challenge B-06")
+    agent = prepareAgent("Challenge C-12")
+    for id in "ABCGH2":
+        img = agent.getImage1(id)
+        height, width = img.asImgElement().getSize()
+        print("%s : 高 = %d, 宽 = %d" % (img.name,height, width))
     #AC = agent.getImageTransInfo(srcImgId,dstImgId)
     #print("AC = ",AC)    
-    img2 = agent.getImages2("B3") # ImageTransformInfo
-    transInfo = img2.getImgElementTrans(0,"FLIPV")  # r similar,scale FLIPH FLIPV
-    print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
+    #img2 = agent.getImages2("B3") # ImageTransformInfo
+    #transInfo = img2.getImgElementTrans(0,"FLIPV")  # r similar,scale FLIPH FLIPV
+    #print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
     #transInfo = img2.getImgElementTrans(0,"FLIPH")  # r similar,scale FLIPH FLIPV
     #print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
 
