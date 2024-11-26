@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 from itertools import product
+from idlelib.config import _warn
 
 #from CV2Utils import CV2Utils 
 
@@ -848,6 +849,12 @@ class ImageElement:
             if similar<similarTh : return False
         return True    
     
+    def isElementsEquals2(elements1:list,elements2:list,similarTh=0.90,pixelThreadhold=20)->bool:
+        for e1,e2 in zip(elements1,elements2):
+            if pixelThreadhold>0 and not e1.isBlackPixelEquals(e2,pixelThreadhold) : return False
+            if not e1.isEquals(e2,similarTh) : return False
+        return True
+    
     def isOuterSimilarAllElements(self,elements,similarTh=0.90,hwThreadhold=0)->bool:
         for e in elements:
             if hwThreadhold>0 and not self.isImageShapeMatched(e,hwThreadhold) : return False
@@ -861,7 +868,7 @@ class ImageElement:
     def getTransImage(self,transMode:str):
         if transMode==IMGTRANSMODE_FLIPV or transMode==IMGTRANSMODE_FLIPH or transMode==IMGTRANSMODE_FLIPVH :
             return self.getFlipedImage(transMode)
-        if transMode==IMGTRANSMODE_ROTATE1 or transMode==IMGTRANSMODE_ROTATE2 or transMode==IMGTRANSMODE_ROTATE3:    
+        if transMode==IMGTRANSMODE_ROTATE090 or transMode==IMGTRANSMODE_ROTATE180 or transMode==IMGTRANSMODE_ROTATE270:    
             return self.getRotateImage(transMode)
         if transMode==IMGTRANSMODE_FILLED:
             return self.getFilledImage()
@@ -920,19 +927,35 @@ class ImageElement:
     #def 
     
     def getRotateImage(self,rotaMode:str):
-        #print("rotaMode=",rotaMode )
-        if rotaMode==IMGTRANSMODE_ROTATE1:
-            rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE # ROTATE_90_CLOCKWISE #rotaMode*90
-        elif rotaMode==IMGTRANSMODE_ROTATE2:
-            rotateCode = cv2.ROTATE_180
-        elif rotaMode==IMGTRANSMODE_ROTATE3:
-            rotateCode = cv2.ROTATE_90_CLOCKWISE
-        else:
-            raise BaseException("Invalid rotaMode=%d" % rotaMode)
         if rotaMode in self.transformImgs:
             #print("使用缓存图片...")
             return self.transformImgs.get(rotaMode)
+        #print("rotaMode=",rotaMode )
+        if rotaMode==IMGTRANSMODE_ROTATE090: #ROTAGE90
+            rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE # ROTATE_90_CLOCKWISE==2 #rotaMode*90
+        elif rotaMode==IMGTRANSMODE_ROTATE180:
+            rotateCode = cv2.ROTATE_180 #==1
+        elif rotaMode==IMGTRANSMODE_ROTATE270:
+            rotateCode = cv2.ROTATE_90_CLOCKWISE # ==0
+        else:
+            rotateCode = None
+        
         #print("rotateCode = %d"% rotateCode)
+        imgElement = ImageElement(None,self.name+"-"+rotaMode)
+        if rotateCode==None:
+            if not rotaMode.startswith("ROTATE") : raise BaseException("Invalid rotaMode=%s" % rotaMode)
+            angle = int(rotaMode[6:])
+            #print("angle = ",angle)
+            h, w = self.image.shape
+            # 2x3 的仿射变换矩阵
+            m = cv2.getRotationMatrix2D(center=(w // 2, h // 2), angle=angle, scale=1)
+            imgElement.image = cv2.warpAffine(src=self.image, M=m, dsize=(h, w),borderValue=255) #img.shape[1::-1])
+        else:    
+            imgElement.image = cv2.rotate(self.image ,rotateCode ) 
+        imgElement.update()    
+        self.transformImgs[rotaMode] = imgElement
+        return imgElement
+        """
         imgElement = ImageElement(self.image.shape,self.name+"-"+rotaMode)
         img = imgElement.image # np.full(self.image.shape, 255, np.uint8)
         if rotateCode==cv2.ROTATE_180 or (self.ex-self.x0)==(self.ey-self.y0) :
@@ -977,33 +1000,45 @@ class ImageElement:
         imgElement.update()    
         self.transformImgs[rotaMode] = imgElement
         return imgElement
+        """
     
     def getFilledImage(self):
         imgKey = IMGTRANSMODE_FILLED
         if imgKey in self.transformImgs:
             #print("使用缓存图片...")
             return self.transformImgs.get(imgKey)
-        
-        imgElement = ImageElement(self.image.shape,self.name+"-"+imgKey)
-        #imgElement.image = self.image.copy()
-        img = imgElement.image 
-        for y in range(self.y0,self.ey):
-            for x in range(self.getStartPointX(y),self.getEndPointX(y)+1):
-                img[y,x] = 0
-        for x in range(self.x0,self.ex):
-            startY = self.getStartPointY(x)
-            if startY<0:
+        self.transformImgs[imgKey] = self._newFlipedImage(self.name+"-"+imgKey)
+        return self.transformImgs[imgKey]
+    
+    def _newFlipedImage(self,imgName):
+        image = self.image
+        height ,width = image.shape
+        uf = UFarray() # 
+        uf.makeLabel() # 忽略 0
+        labels = np.full((height, width), 0, np.int32)
+        for y, x in product(range(height), range(width)):
+            if image[y,x] == 0:
                 continue
-            endY = self.getEndPointY(x)
-            for y in range(self.y0,startY):
-                img[y,x] = 255
-            for y in range(endY+1,self.ey):
-                img[y,x] = 255
-        # todo 还可能有些 凹进去的点 没被设置
-          # cv2.floodFill         
-        imgElement.update()    
-        self.transformImgs[imgKey] = imgElement
-        return imgElement
+            if y > 0 and image[y-1,x] != 0:
+                # 上行(b)) 有,  
+                labels[y,x] = labels[y-1,x]
+                if x > 0 and image[y,x-1] != 0:
+                    uf.union(labels[y,x], labels[y,x-1])  #  合并到  上面,    
+            elif x > 0 and image[y,x-1] != 0:
+                # 左 (d)
+                labels[y,x] = labels[y,x-1]
+            else: 
+                labels[y,x] = uf.makeLabel()
+ 
+                #print("(%d,%d) 新生成 Label =%d" %(y,x,labels[y, x]))
+
+        # 精简
+        uf.flatten()   
+        imgElement = ImageElement(image.shape,imgName)     
+        for y, x in product(range(height), range(width)):
+            if uf.findRoot(labels[y,x])!=1: # 第一次出现的白色 为 背景
+                imgElement.addPixel(x, y)
+        return imgElement        
     
     def isFilledImage(self):
         cacheKey = "isFilledImage("+self.name+")"
@@ -1416,7 +1451,9 @@ class Image1:
             pass
         self._imgElements = Image1.splitImage(self.image,self.name+"[%d]")
         return self._imgElements  
-        
+    
+    def getImageElement(self,idx:int)->ImageElement:
+        return self.getImageElements()[idx]     
      #
      # 将图片(按像素相连)分隔成多个元素, 相连的像素分在一个元素组中
      #
@@ -1604,6 +1641,63 @@ class Image1:
         Image1.cached[cacheKey] = (count ,blackCount, height*width ,image)             
         return Image1.cached[cacheKey] #count ,blackCount, height*width ,image
 
+    def isMatchedLRMerged(img1,img2,img3)->bool:
+        cacheKey = "MatchedLRMerged("+img1.name+","+img2.name+","+img3.name+")"
+        if not cacheKey in Image1.cached:
+            Image1.cached[cacheKey] = Image1.__calc_isMatchedLRMerged(img1,img2,img3)
+        return Image1.cached[cacheKey]
+
+    # img1+img2 => img3
+    def __calc_isMatchedLRMerged(img1,img2,img3)->bool:
+        if len(img1.getImageElements())!=1 or  len(img2.getImageElements())!=1 or len(img3.getImageElements())!=1:
+            return False
+        e1 = img1.getImageElement(0)
+        e2 = img2.getImageElement(0)
+        e3 = img3.getImageElement(0)
+        height1,width1  =  e1.getSize()
+        height2,width2  =  e2.getSize()
+        height3,width3  =  e3.getSize()
+        #print("%s.width=%d,height=%d,%s.width=%d,height=%d,%s.width=%d,height=%d" % (img1.name,width1,height1,img2.name,width2,height2,img3.name,width3,height3))
+        if abs(height3-height1)>1 or abs(height3-height2)>1 or (width1+width2-width3)>2 :
+            return False
+        n1 = e1.blackPixelCount
+        n2 = e2.blackPixelCount
+        n3 = e3.blackPixelCount
+        #print("%s.blackPixelCount=%d,%s.blackPixelCount=%d,%s.blackPixelCount=%d : (%d+%d-%d)/%d = %f" % (img1.name,n1,img2.name,n2,img3.name,n3,n1,n2,n3,n3,abs (n1+n2-n3) / n3 ))
+        if n3==0 or abs (n1+n2-n3) / n3 >0.1:
+            return False
+        #  Challenge Problem E-04 的 _img2 img3R 
+        def cmpLRImage(img1,img2,total)->bool:
+            diff = countImageDiff(img1,img2)
+            if diff/total < 0.2: return True
+            height,width = img1.shape
+            for roll in [1,2,3]:
+                img1X = img1[0:height,roll:width]  # img1 右移 一位 
+                img2X = img2[0:height,0:width-roll]  # img2 
+                diff = countImageDiff(img1X,img2X)
+                #print("roll = %d : diff=%d/%d = %f  " %(roll,diff,total,diff/total))
+                if diff/total < 0.2: return True
+                img1X = img1[0:height,0:width-roll]  # img1 右移 一位 
+                img2X = img2[0:height,roll:width]  # img2 
+                diff = countImageDiff(img1X,img2X)
+                #print("roll = %d : diff=%d/%d = %f  " %(roll,diff,total,diff/total))
+                if diff/total < 0.2: return True
+            return False
+
+        _img1 = e1.image[e1.y0:e1.ey, e1.x0:e1.ex]
+        _img2 = e2.image[e2.y0:e2.ey, e2.x0:e2.ex]
+        img3L = e3.image[e3.y0:e3.ey, e3.x0:e3.x0+width1]
+        img3R = e3.image[e3.y0:e3.ey, e3.ex-width2:e3.ex]
+        #print("_img1.size = %d,%d" % _img1.shape )
+        #print("_img2.size = %d,%d" % _img2.shape )
+        #print("img3L.size = %d,%d" % img3L.shape )
+        #print("img3R.size = %d,%d" % img3R.shape )
+        return cmpLRImage(_img1,img3L,e1.blackPixelCount) and cmpLRImage(_img2,img3R,e2.blackPixelCount)
+        return  False
+        #img1R = e1.image[self.y0:self.ey, self.x0:self.ex]
+        return n3>0 and abs (n1+n2-n3) / n3 <0.02
+        
+
     def getSumImgElementsBlackPoints(self)->int:
         if self._blackPixelCount>=0:
             #print("使用缓存 ...")
@@ -1672,9 +1766,9 @@ IMGTRANSMODE_FLIPVH = "FLIPVH"  #   (以元素为中心)水平翻转 ( 左右 ) 
 #IMGTRANSMODE_WHOLEFLIPH = "WHOLEFLIPH"  #   (以整个图为中心)水平翻转 ( 左右 ) flipMode==1
 #IMGTRANSMODE_WHOLEFLIPVH = "WHOLEFLIPVH"  #   (以整个图为中心)水平翻转 ( 左右 ) flipMode==-1
 
-IMGTRANSMODE_ROTATE1 = "ROTAGE90" #  逆时针 旋转 90度
-IMGTRANSMODE_ROTATE2 = "ROTAGE180" #   旋转 180度
-IMGTRANSMODE_ROTATE3 = "ROTAGE270" #  逆时针 旋转 270度(-90度)  
+IMGTRANSMODE_ROTATE090 = "ROTATE090" #  逆时针 旋转 90度
+IMGTRANSMODE_ROTATE180 = "ROTATE180" #   旋转 180度
+IMGTRANSMODE_ROTATE270 = "ROTATE270" #  逆时针 旋转 270度(-90度)  
 IMGTRANSMODE_FILLED = "FILLED"
 IMGTRANSMODE_UNFILLED = "UNFILLED"
 IMGTRANSMODE_SIMILAR = "SIMILAR"
@@ -1839,7 +1933,7 @@ class Images2:
                 return  ImageElementTrans(transMode,similar>=Images2.SimilarMatchedThreshold,similar,matched3 and pixMatched,matched3,similar2,scale)    
             return  ImageElementTrans(transMode,False,0,False,False,0,0)
 
-        if transMode==IMGTRANSMODE_ROTATE1 or transMode==IMGTRANSMODE_ROTATE2 or transMode==IMGTRANSMODE_ROTATE3:
+        if transMode==IMGTRANSMODE_ROTATE090 or transMode==IMGTRANSMODE_ROTATE180 or transMode==IMGTRANSMODE_ROTATE270:
             if srcImgElement.isBlackPixelRatioEquals(dstImgElement):
                 rotateImg = srcImgElement.getRotateImage(transMode)
                 if rotateImg==None:
@@ -1855,6 +1949,12 @@ class Images2:
     
     def isBlackPixelRatioEquals(self,elementIdx:int,ratioThreadhold=0.05) ->bool:
         return self.img1Elements[elementIdx].isBlackPixelRatioEquals(self.img2Elements[elementIdx],ratioThreadhold)
+
+    def isRoteteMatched(self,elementIdx:int,rotate:int)->bool:
+        if( not self.isBlackPixelRatioEquals(elementIdx)) : return False
+        if rotate<0 : rotate += 360
+        rotateImg = self.img1Elements[elementIdx].getRotateImage("ROTATE%03d" %rotate )
+        return  rotateImg.isEquals(self.img2Elements[elementIdx])        
 
     #
     # 判断 图片 是基于整个图 翻转
@@ -2033,6 +2133,48 @@ class Images2:
             if flags==3: break        
         self._allImagesFilledFlags = flags    
         return flags 
+    
+    def getIncedElements(self)->int: 
+        try:
+            return self._incedElements
+        except AttributeError as e:pass 
+        self._incedElements = self.__getIncedElements()
+        return self._incedElements
+    
+    def __getIncedElements(self)->int: 
+        n1 = len(self.img1Elements)
+        n2 = len(self.img2Elements)
+        if n2<=n1: return None
+        idxsInImg2Elements = []
+        for e1 in self.img1Elements:
+            i = e1.getIndexOfEqElements(self.img2Elements,idxsInImg2Elements,0.85)
+            if i<0: return None
+            idxsInImg2Elements.append(i)
+        incedElements = []
+        for i in range(n2):
+            if indexOf(idxsInImg2Elements,i)<0: incedElements.append(self.img2Elements[i])
+        return incedElements
+        """
+        def elementsEqs(a1,a2):
+            for e1,e2 in zip(a1,a2):
+            #    if not e1.isEquals(e2,0.85): return False
+                # Challenge E-11 : G[4] H[4] : 0.87
+            return True
+        if elementsEqs(self.img1Elements,self.img2Elements[0:n1]):
+            return self.img2Elements[n1:]
+        if elementsEqs(self.img1Elements,self.img2Elements[n2-n1:]):
+            return self.img2Elements[0:n2-n1]
+        return None
+        """    
+    
+    def isIncedSameElements(self,otherImgs)->bool:
+        if len(self.img2Elements)-len(self.img1Elements) != len(otherImgs.img2Elements)-len(otherImgs.img1Elements): 
+            return False
+        thisInced = self.getIncedElements()
+        if thisInced==None: return False
+        otherInced = otherImgs.getIncedElements()
+        if otherInced==None: return False
+        return ImageElement.isElementsEquals2(thisInced,otherInced)
 
 # End class Images2
 
@@ -2365,6 +2507,7 @@ class AnswerScore:
 #
 class Agent:
     _DEBUG = False
+    _WARN = False
     def __init__(self):
         """
         The default constructor for your Agent. Make sure to execute any processing necessary before your Agent starts
@@ -2424,7 +2567,7 @@ class Agent:
     # @param imgs1Name,imgs2Name:  一行 或 一列 或 对角线 的 两个图 ,如 "AB","AC", "C1" ,"B1" 等
     # @param scoreAddTo 得分结果 累加到 scoreAddTo 中
     #    
-    def calculateImages2MatchScore(self,imgs1Name,imgs2Name,scoreAddTo:AnswerScore,scoreWeight=1,for3X3=False): 
+    def calculateImages2MatchScore(self,imgs1Name,imgs2Name,scoreAddTo:AnswerScore,scoreWeight=1): 
         imgsFrm1 = self.getImages2(imgs1Name)
         imgsFrm2 = self.getImages2(imgs2Name)
         elementCountDiff1 = imgsFrm1.getImgElementsCountDiff()  # count(B) - count(A)
@@ -2440,6 +2583,8 @@ class Agent:
                 scoreFactor /= 10
         #print("[%s-%s] scoreFactor=%f,minElementCount=%f = min(%d,%d); elementCountDiff1=%d,elementCountDiff2=%d" % (imgs1Name,imgs2Name,scoreFactor,minElementCount,imgsFrm1.getImgElementCount(),imgsFrm2.getImgElementCount(),elementCountDiff1,elementCountDiff2))
         caseCheckFilled = True
+        caseCheckRota45 = True
+        caseOuterSharpCmp = True
         allElementsMatchedTransMode = []  # indexed by elementIdx
         for elementIdx in range( minElementCount ):
             elementsMatchedTransMode = []
@@ -2459,7 +2604,7 @@ class Agent:
                     caseRotate = False
                     break
             if caseRotate:
-                for transMode in [IMGTRANSMODE_ROTATE1,IMGTRANSMODE_ROTATE3,IMGTRANSMODE_ROTATE2]:
+                for transMode in [IMGTRANSMODE_ROTATE090,IMGTRANSMODE_ROTATE270,IMGTRANSMODE_ROTATE180]:
                     t = imgsFrm1.getImgElementTrans(elementIdx,transMode)
                     if t.matched:
                         forAllTrans.append(t)
@@ -2469,6 +2614,8 @@ class Agent:
                 #    print("%s-%s: imgs1.transMode=%s,%s:%f,%s:%f " %(imgs1Name,imgs2Name,transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.matched2,transInfo.similar2))
                 if not transInfo.matched and not transInfo.matched2:
                     continue
+                caseCheckRota45 = False
+                caseOuterSharpCmp = False
                 #if Agent._DEBUG and imgs2Name=="C6":
                 #    print("%s : 满足变换规则 %s" %(imgs1Name,transInfo.transMode))
                 transInfo2 = imgsFrm2.getImgElementTrans(elementIdx,transInfo.transMode)
@@ -2500,11 +2647,35 @@ class Agent:
                 caseCheckFilled = False
 
         #
+        # [Challenge Problem B-09]  判断外形匹配
+        #
+        if caseOuterSharpCmp:
+            if imgsFrm1.isImgElementsOutterSharpMatched() and imgsFrm2.isImgElementsOutterSharpMatched():
+                score = 4
+                desc2 = ""
+                if imgsFrm1.getImgElementCount()==1 and imgsFrm2.getImgElementCount()==1:
+                    def _getFillMode(e):
+                        if e.isFilledImage(): return 1
+                        if e.isLinesFielldImage() : return 2
+                        return 0                
+                    #fillModeA = _getFillMode(imgsFrm1.img1Elements[0])
+                    if _getFillMode(imgsFrm1.img1Elements[0])==_getFillMode(imgsFrm2.img1Elements[0]) \
+                    and _getFillMode(imgsFrm1.img2Elements[0])==_getFillMode(imgsFrm2.img2Elements[0]):
+                            score += 1
+                            desc2 = ",且填充模式一致"
+                    #filledFlags1 =  imgsFrm1.getAllImagesFilledFlags()
+                    #if (filledFlags1==1 or filledFlags1==2):
+                    #    filledFlags2 =  imgsFrm2.getAllImagesFilledFlags()
+                    #    if (filledFlags2==1 or filledFlags2==2):
+                    #        score += 1
+                    #        desc2 = ",且填充模式一致"
+                scoreAddTo.addScore(score*scoreWeight,imgs1Name,imgs2Name,"外形相似"+desc2)
+        #
         # Challenge Problem B-10 : 如果 整图 旋转  AB/C4 
         #
         if elementCountDiff1==elementCountDiff2  and elementCountDiff1==0 and imgsFrm1.getImgElementCount()==imgsFrm2.getImgElementCount() and minElementCount>1:
             checkAllRota = None
-            for transMode in [IMGTRANSMODE_ROTATE1,IMGTRANSMODE_ROTATE2,IMGTRANSMODE_ROTATE3]:
+            for transMode in [IMGTRANSMODE_ROTATE090,IMGTRANSMODE_ROTATE180,IMGTRANSMODE_ROTATE270]:
                 allEleMatched = True
                 for elementIdx in range( minElementCount ):
                     if transMode not in allElementsMatchedTransMode[elementIdx]:
@@ -2518,9 +2689,26 @@ class Agent:
                 if imgsFrm1.img1.getRotateImage(checkAllRota).isEquals(imgsFrm1.img2.asImgElement()) and imgsFrm2.img1.getRotateImage(checkAllRota).isEquals(imgsFrm2.img2.asImgElement()):
                     scoreAddTo.addScore(3*scoreWeight,imgs1Name,imgs2Name,"整图旋转")
 
-        if for3X3:
-            return
-                            
+       #
+        #  Challenge Problem B-04 : 区答案 3,4
+        #     
+        if caseCheckFilled:
+            filledFlags =  imgsFrm1.getAllImagesFilledFlags()
+            if (filledFlags==1 or filledFlags==2) and filledFlags==imgsFrm2.getAllImagesFilledFlags():
+                scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两组元素全为填充图" if filledFlags==1 else "两组元素全为非填充图") 
+                
+        #
+        # Challenge Problem B-02 : 区答案 1,2,6 
+        #
+        if caseCheckRota45 and elementCountDiff1==0 and elementCountDiff2==0 and  len(imgsFrm1.img1.getImageElements())==1:
+            for rotaMode in ["ROTATE315","ROTATE045","ROTATE135","ROTATE225"]:
+                rotaImg1 = imgsFrm1.img1.asImgElement().getRotateImage(rotaMode)
+                if not imgsFrm1.img2.asImgElement().isSimilar(rotaImg1): continue #similarTh=0.90
+                rotaImg2 = imgsFrm2.img1.asImgElement().getRotateImage(rotaMode)
+                if  imgsFrm2.img2.asImgElement().isSimilar(rotaImg2):
+                    scoreAddTo.addScore(10*scoreWeight,imgs1Name,imgs2Name,"满足旋转"+rotaMode[6:]+"度")
+                    break
+                    
         #
         # 考虑 元素 增加 / 减少 的规则:
         #        
@@ -2545,27 +2733,7 @@ class Agent:
                 scoreAddTo.addScore(2* scoreWeight,imgs1Name,imgs2Name,"两组元素增减个数相同")
                 # Challenge Problem B-03 : 需要 较高的 分数, 
 
-        #
-        # 判断像素 比例 变化规律
-        #
-        
-        r1 = imgsFrm1.getImagePixelRatio()
-        r2 = imgsFrm2.getImagePixelRatio()
-        diff = abs(r1-r2)
-        if  diff< 0.05:
-            scoreAddTo.addScore(3,imgs1Name,imgs2Name,"两图片素个数变化率相差<0.05") 
-        elif diff < 0.1:
-            scoreAddTo.addScore(2,imgs1Name,imgs2Name,"两图片像素个数变化率相差<0.1") 
-        elif diff < 0.15:
-            scoreAddTo.addScore(1,imgs1Name,imgs2Name,"两图片像素个数变化率相差<0.15") 
 
-        #
-        #  Challenge Problem B-04 : 区答案 3,4
-        #     
-        if caseCheckFilled:
-            filledFlags =  imgsFrm1.getAllImagesFilledFlags()
-            if (filledFlags==1 or filledFlags==2) and filledFlags==imgsFrm2.getAllImagesFilledFlags():
-                scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两组元素全为填充图" if filledFlags==1 else "两组元素全为非填充图") 
             """
             filledFlags =  ImageElement.getImagesFilledFlags(imgsFrm1.img1Elements) #[elementIdx].isFilledImage()
             if (filledFlags==1 or filledFlags==2 )  \
@@ -2593,6 +2761,21 @@ class Agent:
 
             #scoreFactor
 
+    def calculateImages2MatchScore_2(self,imgs1Name,imgs2Name,scoreAddTo:AnswerScore,scoreWeight=1): 
+        imgsFrm1 = self.getImages2(imgs1Name)
+        imgsFrm2 = self.getImages2(imgs2Name)
+        #
+        # 判断像素 比例 变化规律
+        #
+        r1 = imgsFrm1.getImagePixelRatio()
+        r2 = imgsFrm2.getImagePixelRatio()
+        diff = abs(r1-r2)
+        if  diff< 0.05:
+            scoreAddTo.addScore(3,imgs1Name,imgs2Name,"两图片素个数变化率相差<0.05") 
+        elif diff < 0.1:
+            scoreAddTo.addScore(2,imgs1Name,imgs2Name,"两图片像素个数变化率相差<0.1") 
+        elif diff < 0.15:
+            scoreAddTo.addScore(1,imgs1Name,imgs2Name,"两图片像素个数变化率相差<0.15") 
 
 
 
@@ -2623,7 +2806,7 @@ class Agent:
                 break
             idxOfImgs2.append(j)
         all6ImgEquals = False    
-        caseAddOrSubEq = True 
+        caseAddOrSubEq = True  # 
         caseXorEq = True
         caseOuterSharpCmp = True  # 判断外形  
         caseXorCmp = True
@@ -2701,6 +2884,8 @@ class Agent:
         nElementIfSame = -1 # 如果 六个 图形 具有 相同 元素 个数,  nElementIfSame 将 >0
         nElementIfSame1 = -1 # 如果 第一组 三个 图形 具有 相同 元素 个数, nElementIfSame1  将 >0
         nElementIfSame2 = -1 # 如果 第二组 三个 图形 具有 相同 元素 个数, nElementIfSame1  将 >0
+        #if "ABC"==imgs1Name and "GH3"==imgs2Name:
+        #    print("[%s %s]elementCountIncAB=%d, elementCountIncBC=%d ; elementCountIncGH=%d, elementCountIncHI=%d" %(imgs1Name,imgs2Name,elementCountIncAB,elementCountIncBC,elementCountIncGH,elementCountIncHI))
         if elementCountIncAB==elementCountIncGH and elementCountIncBC==elementCountIncHI:  # 元素个数递增 相同
             if elementCountIncAB==0 and elementCountIncBC==0 :
                 nElementIfSame1 = len(imgsFrm1.img1Elements)
@@ -2722,6 +2907,21 @@ class Agent:
             elif (imgsFrm1.allElementsInCenterX()>0  and imgsFrm2.allElementsInCenterX()>0):
                 score += 1 
                 desc  += ",且所有元素在同垂直线上"
+            if elementCountIncAB>0 and elementCountIncBC>0 :
+                if  self.getImages2(imgs1Name[0:2]).isIncedSameElements(self.getImages2(imgs2Name[0:2])) and self.getImages2(imgs1Name[1:]).isIncedSameElements(self.getImages2(imgs2Name[1:])) :
+                    score += 1 
+                    # Challenge Problem E-11 : 添加了相同的元素, 区分 3,6
+                    #  Challenge E-11 [ABC-GH3]两组图形元素个数变化递增量相同,且AB与GH增加了相同元素,BC与H3也增加了相同元素
+                    desc  += ",且%s与%s增加了相同元素,%s与%s也增加了相同元素" %(imgs1Name[0:2],imgs2Name[0:2],imgs1Name[1:],imgs2Name[1:])
+                elif  self.getImages2(imgs1Name[0:2]).isIncedSameElements(self.getImages2(imgs2Name[1:])) and self.getImages2(imgs1Name[1:]).isIncedSameElements(self.getImages2(imgs2Name[0:2])) :
+                    score += 0.5
+                    # Challenge Problem E-11 : 添加了相同的元素, 区分 3,6
+                    #  Challenge E-11 [ABC-GH3]两组图形元素个数变化递增量相同,且AB与GH增加了相同元素,BC与H3也增加了相同元素
+                    desc  += ",且%s与%s增加了相同元素,%s与%s也增加了相同元素" %(imgs1Name[0:2],imgs2Name[1:],imgs1Name[1:],imgs2Name[0:2])
+                
+                pass
+                #abInced = self.getImages2(imgs1Name[0:2]).getIncedElements()
+                #if abInced!=None 
             scoreAddTo.addScore(score * scoreWeight ,imgs1Name,imgs2Name,desc)
             #
             # D-06 : 比较最后一个元素 的,  ABC - GH1
@@ -2790,37 +2990,38 @@ class Agent:
             scoreFac = 1/nElementIfSame
             for i in range(nElementIfSame):
                 # 逆时针
-                if    imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) \
-                  and self.getImages2(imgs1Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) \
-                  and self.getImages2(imgs2Name[0:2]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) \
-                  and self.getImages2(imgs2Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) :
+                if    imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE090) \
+                  and self.getImages2(imgs1Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE090) \
+                  and self.getImages2(imgs2Name[0:2]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE090) \
+                  and self.getImages2(imgs2Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE090) :
                     scoreAddTo.addScore( 10*scoreFac* scoreWeight,imgs1Name,imgs2Name,"两组图形为90度旋转关系")
                     caseAddOrSubEq = False
                     caseXorEq = False
                     caseBitOPCmp = False
                     continue
-                if   imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
-                  and self.getImages2(imgs1Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
-                  and self.getImages2(imgs2Name[0:2]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) \
-                  and self.getImages2(imgs2Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) :
+                if   imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE270) \
+                  and self.getImages2(imgs1Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE270) \
+                  and self.getImages2(imgs2Name[0:2]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE270) \
+                  and self.getImages2(imgs2Name[1:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE270) :
                     scoreAddTo.addScore( 10*scoreFac* scoreWeight,imgs1Name,imgs2Name,"两组图形为-90度旋转关系")
                     caseAddOrSubEq = False
                     caseXorEq = False
                     caseBitOPCmp = False
                     continue
                 imgsAC = self.getImages2(imgs1Name[0:1]+imgs1Name[2:3])
-                if (imgsAC.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) and self.getImages2(imgs2Name[0:1]+imgs2Name[2:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE1) )\
-                       or (imgsAC.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) and self.getImages2(imgs2Name[0:1]+imgs2Name[2:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3)) :
+                if    (imgsAC.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE090) and self.getImages2(imgs2Name[0:1]+imgs2Name[2:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE090) \
+                        and imgsAB.isRoteteMatched(i,45) and self.getImages2(imgs2Name[0:2]).isRoteteMatched(i,45)  )\
+                  or (imgsAC.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE270) and self.getImages2(imgs2Name[0:1]+imgs2Name[2:3]).isImgElementTransMatched(i,IMGTRANSMODE_ROTATE270) \
+                        and imgsAB.isRoteteMatched(i,-45) and self.getImages2(imgs2Name[0:2]).isRoteteMatched(i,-45)  ) :
                     caseAddOrSubEq = False
                     caseXorEq = False
                     caseBitOPCmp = False
-                    # 
-                    if imgsAB.isBlackPixelRatioEquals(i) and self.getImages2(imgs2Name[0:2]).isBlackPixelRatioEquals(i) : # todo 需要判断 满足 45 度的旋转 ,暂时 使用 isBlackPixelRatioEquals 代替
+                        #if imgsAB.isBlackPixelRatioEquals(i) and self.getImages2(imgs2Name[0:2]).isBlackPixelRatioEquals(i) : # todo 需要判断 满足 45 度的旋转 ,暂时 使用 isBlackPixelRatioEquals 代替
                         # Challenge D-02 :  [CDH-AE2]两组图形为45度旋转关系 : 判断错误, 
                         # Challenge D-04 :  [ABC-GH6] : 需要 5 分 区分 答案 2
-                        scoreAddTo.addScore( 5*scoreFac* scoreWeight,imgs1Name,imgs2Name,"两组图形为45度旋转关系")
+                    scoreAddTo.addScore( 5*scoreFac* scoreWeight,imgs1Name,imgs2Name,"两组图形为45度旋转关系")
                     continue
-                #elif imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE3) 
+                #elif imgsAB.isImgElementTransMatched(i,IMGTRANSMODE_ROTATE270) 
         # END if nElementIfSame>0: #六个 图形 具有 相同 元素 个数
         
         #
@@ -2957,13 +3158,14 @@ class Agent:
         #if caseTransMatched \
         #        and len(imgsFrm1.img1Elements)==1 and elementCountIncAB==elementCountIncGH and elementCountIncBC==0 and elementCountIncHI==0 \
         #        and imgsBH.isImgElementsEqualsOrSimilar() :
-            #for transMode in [IMGTRANSMODE_ROTATE1,IMGTRANSMODE_ROTATE3,IMGTRANSMODE_ROTATE2]:
+            #for transMode in [IMGTRANSMODE_ROTATE090,IMGTRANSMODE_ROTATE270,IMGTRANSMODE_ROTATE180]:
             #imgsAG.getAllImgElementTrans()
         #    pass         
+        caseLRMerge  = caseAddOrSubEq  # 满足 左右合并,  Challenge Problem E-04
 
         #
         # 是否 匹配 相加 属性 或 相减
-        #  即:  图片A + 图片B == 图片C
+        #  即:  图片A + 图片B == 图片C  ( 按 bit 加 )
         #    且 图片I + 图片B == 图片C
         #  或:  图片A - 图片B == 图片C
         #    且 图片I - 图片B == 图片C
@@ -2983,12 +3185,28 @@ class Agent:
                     diffGHI,_,totalPixcelGHI = Image1.countImagesDiff([self.getImage1(imgs2Name[abc[0]]),self.getImage1(imgs2Name[abc[1]])],[self.getImage1(imgs2Name[abc[2]])])  
                     if diffGHI/totalPixcelGHI<=0.02:
                         scoreAddTo.addScore( 6 * scoreWeight,imgs1Name,imgs2Name,"第%d和%d图片像素合并==第%d个图片"%(abc[0]+1,abc[1]+1,abc[2]+1))
-                    #caseXorEq = False    
-                    #caseAndCmp = False
+                        #caseXorEq = False    
+                        #caseAndCmp = False
+                        caseXorCmp = False
+                        caseBitOPCmp = False
+                        caseLRMerge = False
                     break
 
         #
-        # 三个图形 异或 后, 相同  : D-09
+        #  Challenge Problem E-04 :  [ABC-GH5]第2和3图片左右合并==第1个图片
+        #             
+        if caseLRMerge:
+            for abc in ((0,1,2),(1,2,0),(0,2,1)):
+                if Image1.isMatchedLRMerged(self.getImage1(imgs1Name[abc[0]]),self.getImage1(imgs1Name[abc[1]]),self.getImage1(imgs1Name[abc[2]])) \
+                      and Image1.isMatchedLRMerged(self.getImage1(imgs2Name[abc[0]]),self.getImage1(imgs2Name[abc[1]]),self.getImage1(imgs2Name[abc[2]])) :
+                    scoreAddTo.addScore( 6 * scoreWeight,imgs1Name,imgs2Name,"第%d和%d图片左右合并==第%d个图片"%(abc[0]+1,abc[1]+1,abc[2]+1))
+                    caseXorCmp = False
+                    caseBitOPCmp = False
+            #isMatchedLRMerged
+            
+
+        #
+        # 三个图形 异或 后, 相同  : D-09 ???
         #     
         if caseXorCmp:
             xorImg1 = imgsFrm1.getXORImageElement()   
@@ -2996,11 +3214,12 @@ class Agent:
             ratio,_,_ = countImageDiffRatio(xorImg1.image,xorImg2.image)
             #print("------%s - %s : xorImgDiffRatio = %s" %(xorImg1.name,xorImg2.name,ratio))
             if ratio<0.03:
-                scoreAddTo.addScore( 3*scoreWeight ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
+                scoreAddTo.addScore( 1*scoreWeight ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
+                pass
                 #caseBitOPCmp = False  
                 #caseAddOrSubEq = False
-            elif ratio<0.05:
-                scoreAddTo.addScore( 1*scoreWeight ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
+            #elif ratio<0.05:
+            #    scoreAddTo.addScore( 1*scoreWeight ,imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
                 #caseBitOPCmp = False 
                 #caseAddOrSubEq = False
             
@@ -3135,20 +3354,34 @@ class Agent:
 # solve_2x2
 #############################################################
     def solve_2x2(self):
-        answers = []
+        allAnswersScore = []
         #for answer in self.potential_answers:
         for answer in self.images:
-            if not answer.isdigit():
-                continue
+            if not answer.isdigit(): continue
             answerScore = AnswerScore(int(answer))   
             self.calculateImages2MatchScore("AB","C"+answer,answerScore)  # 行比较 : 第一行 与 第 三 行
             self.calculateImages2MatchScore("AC","B"+answer,answerScore)
             #  self.calculateImages2MatchScore("BC","A"+answer,answerScore,0.5) # 对角线 ????
-            if Agent._DEBUG:
-                Agent._printAnswerScoreDetails(answerScore)
-            answers.append(answerScore)
-        answers = AnswerScore.getMaxScoreAnswers(answers)
-        return answers[0].answer
+            #if Agent._DEBUG:
+            #    Agent._printAnswerScoreDetails(answerScore)
+            allAnswersScore.append(answerScore)
+        answersScore = AnswerScore.getMaxScoreAnswers(allAnswersScore)
+      
+        if len(answersScore)>1:
+            if Agent._WARN:
+                print("答案 %s 的得分相同(%f),继续根据像素变换 判断 ..." %(",".join(map(lambda s:str(s.answer),answersScore)),answersScore[0].score))
+            for answerScore in  answersScore:
+                answer = str(answerScore.answer)
+                self.calculateImages2MatchScore_2("AB","C"+answer,answerScore)  # 行比较 : 第一行 与 第 三 行
+                self.calculateImages2MatchScore_2("AC","B"+answer,answerScore)
+            answersScore = AnswerScore.getMaxScoreAnswers(answersScore)
+
+        if Agent._DEBUG:
+            Agent._printAnswersScoreDetails(allAnswersScore)
+      
+        if len(answersScore)>1 and Agent._WARN:
+            print("[%s] 答案 = %s " %(self.problem.name,",".join(map(lambda s:str(s.answer),answersScore))))
+        return answersScore[0].answer
 
 
 ###############################################################
@@ -3160,8 +3393,7 @@ class Agent:
     def solve_3x3(self):
         allAnswersScore = []
         for answer in self.images:
-            if not answer.isdigit():
-                continue
+            if not answer.isdigit():continue
             answerScore = AnswerScore(int(answer)) 
     #         A     B    C    
     #         D     E    F
@@ -3188,7 +3420,7 @@ class Agent:
         answersScore = AnswerScore.getMaxScoreAnswers(allAnswersScore)
 
         if len(answersScore)>1:
-            if Agent._DEBUG:
+            if Agent._WARN:
                 print("答案 %s 的得分相同(%f),继续根据像素变换 判断 ..." %(",".join(map(lambda s:str(s.answer),answersScore)),answersScore[0].score))
             for answerScore in  answersScore:
                 answer = str(answerScore.answer)
@@ -3202,11 +3434,16 @@ class Agent:
 
         if Agent._DEBUG:
             Agent._printAnswersScoreDetails(allAnswersScore)
+            
+        if len(answersScore)>1 and Agent._WARN:
+            print("[%s] 答案 = %s " %(self.problem.name,",".join(map(lambda s:str(s.answer),answersScore))))
+            
         return answersScore[0].answer
 
     def prepareProblem(self, problem):
         self.images = load_problem_images(problem)
         self.imagesFrame = {}
+        self.problem = problem
         ImageElement.cached = {}
         Image1.cached = {}
         Images2.cached = {}
