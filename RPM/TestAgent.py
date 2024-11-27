@@ -876,7 +876,7 @@ def main():
     #testAgentSolve("C-08")
     #testAgentSolve("C-04")
     #testAgentSolve("C-07")  #[ABC-GH2]两组图形上下翻转关系
-    #testAgentSolve("C-09") #??? 
+    #testAgentSolve("C-09") #???  
     #testAgentSolve("D-02")  # [ABC-GH1]两组图形具有相同组合
     #testAgentSolve("D-03")
     #testAgentSolve("D-04")
@@ -891,6 +891,7 @@ def main():
     #testAgentSolve("E-02") #]前两图片像素合并==第三个图片
     #testAgentSolve("E-03") # 前两图片像素合并==第三个图片
     #testAgentSolve("E-04") # [ADG-CF8]前两图片像素个数相加或减==第三个图片,且宽高匹配
+    #testAgentSolve("E-08")  #  [ABC-GH1]00E000:两组图形每组XOR后的图形相似
     #testAgentSolve("E-10")  # DEF/GH8   结果 = 2  (!!!期望结果 = 8) : a bitand b==c ABC-GH8]两组图形 A bitand B == C 且 G bitand H==8
     #testAgentSolve("E-11")
     #testAgentSolve("C-06") #前两图片像素个数相加或减==第三个图片,且宽高匹配
@@ -905,6 +906,7 @@ def main():
     #testAgentSolve("Challenge B-09")  #   [AB-C4]外形相似,且填充模式一致
     #testAgentSolve("Challenge B-10")  #  
     #testAgentSolve("Challenge C-04")
+    #testAgentSolve("Challenge C-10")
     #testAgentSolve("Challenge C-12") # [ABC-GH2]两组图形外形具有相同组合,且两组元素大小匹配
     #testAgentSolve("Challenge C-02") #[ABC-GH7]子集关系
     #testAgentSolve("Challenge D-02")  #   [ABC-GH1]两组图形为-90度旋转关系
@@ -917,7 +919,7 @@ def main():
     #testAgentSolve("Challenge D-04") #  [DEF-GH6]两组图形为45度旋转关系
     #********testAgentSolve("Challenge D-06")
     #***********testAgentSolve("Challenge D-07") #[ABC-GH4]两组图形外形具有相同组合,且两组元素各使用不同的填充模式
-    testAgentSolve("Challenge D-09") # ??? 全依靠了 附加分
+    #testAgentSolve("Challenge D-09") # ??? 全依靠了 附加分
     #***********testAgentSolve("Challenge D-10") # [ADG-CF5]第一组中三个图片分别等于第二组中三个图片的每个元素
     #**********testAgentSolve("Challenge D-12") # [ABC-GH6]两组元素个数(不考虑次序的情况下)匹配
 
@@ -929,16 +931,19 @@ def main():
     #**********testAgentSolve("Challenge B-02")  # [AB-C1]满足旋转315度 
     #testAgentSolve("Challenge B-08")   #  顶点 规律 test2:2
 
-    #testAgentSolve("C-08") # 整体对称  结果 = 4 (!!!期望结果 =5);  test2:1
-    #testAgentSolve("C-12") # ??? 结果 = 7 (!!!期望结果 =8) ;  test2:3
+    #testAgentSolve("C-08") # 整体对称 答案 = 2,3 (!!!期望结果 =5);  test2:1
+    #testAgentSolve("C-09") # 多结果  答案 = 2,3
+    #testAgentSolve("C-12") # ??? 结果 = 5 (!!!期望结果 =8) ;  test2:3
 
 
-    #testAgentSolve("E-12") # ????? 结果 = 5 (!!!期望结果 =6) ; test2 ok
+    #testAgentSolve("E-12") # ?????  答案 = 1,2,8;  (!!!期望结果 =6) ; test2 ok
 
-    #testAgentSolve("Challenge C-04") # + 字=> # 字
+    #*********testAgentSolve("Challenge C-04") # + 字=> # 字
+    #testAgentSolve("Challenge C-07") #多结果  答案 = 3,7
     #testAgentSolve("Challenge C-08") # 整体对称, 同 C-8 结果 = 4 (!!!期望结果 =5) ; test2:7
 
-    #testAgentSolve("Challenge D-05") #?????未找到规则
+    #testAgentSolve("Challenge D-01") #?????未找到规则
+    #*****testAgentSolve("Challenge D-05") #?????未找到规则
     #testAgentSolve("Challenge D-11") #?????未找到规则
 
     #testAgentSolve("Challenge E-05") # 顶点 规律 ;  4,6,8,10,12 个数的顶点
@@ -948,7 +953,7 @@ def main():
     #testAgentSolve("Challenge E-09") # ?????未找到规则
     #testAgentSolve("Challenge E-10")  # ?????未找到规则
     #testAgentSolve("Challenge E-11") #[ABC-GH3]两组图形元素个数变化递增量相同,且AB与GH增加了相同元素,BC与H3也增加了相同元素
-    #testAgentSolve("Challenge E-12") #???
+    #************testAgentSolve("Challenge E-12") #???
 
 
     #tempTest()
@@ -962,12 +967,12 @@ def main():
     #testSolveProblemSet("Basic Problems B")  #  ok
     #testSolveProblemSet("Challenge Problems B")  # 8
 
-    #testSolveProblemSet("Basic Problems C") #   : 08 ,12
+    #testSolveProblemSet("Basic Problems C") #   : 08 ,12 ? 9 
     #testSolveProblemSet("Basic Problems D") #   : ok
     #testSolveProblemSet("Basic Problems E") #      12
-    #testSolveProblemSet("Challenge Problems C")  # 4, 8 ;    ??? 7
-    #testSolveProblemSet("Challenge Problems D")  #  11; ??5. 8,10,
-    #testSolveProblemSet("Challenge Problems E")  # :05,06,07,08,09,10,12
+    #testSolveProblemSet("Challenge Problems C")  #  8 ;    ??? 7
+    #testSolveProblemSet("Challenge Problems D")  #  1,11; ??5. 8,10,
+    #testSolveProblemSet("Challenge Problems E")  # :05,06,07,08,09,10
     return
 
     
