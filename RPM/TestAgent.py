@@ -597,6 +597,30 @@ def test_isIncedSameElements(problemId:str,imgs2Id1:str,imgs2Id2:str):
     img2 = agent.getImages2(imgs2Id2)
     print("[%s] %s-%s.isIncedSameElements = %s" %(problemId,imgs2Id1,imgs2Id2,img1.isIncedSameElements(img2)))
 
+def test_getPolygonPoints(problemId:str,imgsId:str):
+    agent = prepareAgent(problemId) 
+    a = []
+    for imgId in imgsId:
+        e = agent.getImage1(imgId).getImageElement(0)
+        points = e.getPolygonPoints()
+        #print("%s:%d : %s" % (imgId,len(points),points))
+        a.append((imgId,len(points),e.isRegularPolygon()))
+    print(",".join(map(lambda v:"%s:%d(%s)"%v,a)))    
+
+def test_isImgSame2SwappedElements(problemId:str,imgs2Id:str):
+    agent = prepareAgent(problemId) 
+    img = agent.getImages2(imgs2Id)
+    print("[%s] %s.sImgSame2SwappedElements = %s" %(problemId,imgs2Id,img.isImgSame2SwappedElements()))
+
+def test_getElementsCenterAlignMerged(problemId:str,imgId1:str,elementIdx1,imgId2:str,elementIdx2,cmpImgId):
+    agent = prepareAgent(problemId) 
+    img1 = agent.getImage1(imgId1)
+    img2 = agent.getImage1(imgId2)
+    img = ImageElement.getElementsCenterAlignMerged([img1.getImageElement(elementIdx1),img2.getImageElement(elementIdx2)])
+    CV2Utils.printImage2(img)
+    img3 = agent.getImage1(cmpImgId)
+    r,_,_ = countImageDiffRatio(img,img3.image)
+    print(r)
 
 def tmpTestImage()->None:    
     problemId = "Challenge D-09"
@@ -860,6 +884,18 @@ def main():
     #test_isIncedSameElements("Challenge E-11","BC","H6") # False
     #test_isIncedSameElements("Challenge E-11","DE","GH") # 
     #test_isIncedSameElements("Challenge E-11","EF","H3") # 
+    #test_getPolygonPoints("Challenge B-01","A")  # 三角形
+    #test_getPolygonPoints("Challenge B-08","ABC456")  # 三角形 A:3,B:4,C:5,4:6,5:7,6:8
+    #test_getPolygonPoints("B-02","A")  # 园 ??? 16
+    #test_getPolygonPoints("Challenge E-05","GH56")
+
+    #test_isImgSame2SwappedElements("C-09","AC") # True
+    #test_isImgSame2SwappedElements("C-09","DF") # True
+    #test_isImgSame2SwappedElements("C-09","G2") # True
+    #test_isImgSame2SwappedElements("C-09","G3") # False
+    #test_getElementsCenterAlignMerged("C-09","A",0,"A",1,"B")
+    #test_getElementsCenterAlignMerged("C-09","D",0,"D",1,"E")
+    #test_getElementsCenterAlignMerged("C-09","G",0,"G",1,"H")
 
     #tmpTestImage()
     #test_newFlipedImage("B-01","1")
@@ -929,10 +965,10 @@ def main():
     # 有问题
     #
     #**********testAgentSolve("Challenge B-02")  # [AB-C1]满足旋转315度 
-    #testAgentSolve("Challenge B-08")   #  顶点 规律 test2:2
+    #*************testAgentSolve("Challenge B-08")   #  顶点 规律 test2:2
 
     #testAgentSolve("C-08") # 整体对称 答案 = 2,3 (!!!期望结果 =5);  test2:1
-    #testAgentSolve("C-09") # 多结果  答案 = 2,3
+    #***********testAgentSolve("C-09") # 多结果  答案 = 2,3
     #testAgentSolve("C-12") # ??? 结果 = 5 (!!!期望结果 =8) ;  test2:3
 
 
@@ -942,17 +978,19 @@ def main():
     #testAgentSolve("Challenge C-07") #多结果  答案 = 3,7
     #testAgentSolve("Challenge C-08") # 整体对称, 同 C-8 结果 = 4 (!!!期望结果 =5) ; test2:7
 
-    #testAgentSolve("Challenge D-01") #?????未找到规则
-    #*****testAgentSolve("Challenge D-05") #?????未找到规则
+    #testAgentSolve("Challenge D-01") #?????未找到规则 答案 = 1,2,5,6
+    #testAgentSolve("Challenge D-05") #?????未找到规则  答案 = 2,3
+    #testAgentSolve("Challenge D-08") #  答案 = 1,2
+    #testAgentSolve("Challenge D-10") #  答案 = 5,7
     #testAgentSolve("Challenge D-11") #?????未找到规则
 
-    #testAgentSolve("Challenge E-05") # 顶点 规律 ;  4,6,8,10,12 个数的顶点
+    #*****testAgentSolve("Challenge E-05") # 顶点 规律 ;  4,6,8,10,12 个数的顶点
     #testAgentSolve("Challenge E-06") #?????未找到规则
-    #testAgentSolve("Challenge E-07") # 顶点 规律 , 4,6,8,10,12 个数的顶点
+    #*********testAgentSolve("Challenge E-07") # 顶点 规律 , 4,6,8,10,12 个数的顶点
     #testAgentSolve("Challenge E-08") #?????未找到规则
     #testAgentSolve("Challenge E-09") # ?????未找到规则
     #testAgentSolve("Challenge E-10")  # ?????未找到规则
-    #testAgentSolve("Challenge E-11") #[ABC-GH3]两组图形元素个数变化递增量相同,且AB与GH增加了相同元素,BC与H3也增加了相同元素
+    #*********testAgentSolve("Challenge E-11") #[ABC-GH3]两组图形元素个数变化递增量相同,且AB与GH增加了相同元素,BC与H3也增加了相同元素
     #************testAgentSolve("Challenge E-12") #???
 
 
@@ -967,12 +1005,12 @@ def main():
     #testSolveProblemSet("Basic Problems B")  #  ok
     #testSolveProblemSet("Challenge Problems B")  # 8
 
-    #testSolveProblemSet("Basic Problems C") #   : 08 ,12 ? 9 
+    #testSolveProblemSet("Basic Problems C") #   : 08 ,12 
     #testSolveProblemSet("Basic Problems D") #   : ok
     #testSolveProblemSet("Basic Problems E") #      12
     #testSolveProblemSet("Challenge Problems C")  #  8 ;    ??? 7
     #testSolveProblemSet("Challenge Problems D")  #  1,11; ??5. 8,10,
-    #testSolveProblemSet("Challenge Problems E")  # :05,06,07,08,09,10
+    #testSolveProblemSet("Challenge Problems E")  # ::06,08,09,10
     return
 
     

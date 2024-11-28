@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+import math
 from itertools import product
 from idlelib.config import _warn
 
@@ -48,6 +49,7 @@ def load_problem_images(problem):
         #
         ravens_image = img
         _, ravens_image = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+        #cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY_INV)
         #_, ravens_image = cv2.threshold(img, 64, 255, cv2.THRESH_BINARY)
 
         # print("ravens_image:", ravens_image)
@@ -1332,6 +1334,24 @@ class ImageElement:
         ImageElement.cached[cacheKey] = imgElement
         return imgElement
     
+    #
+    # 按 中点 对齐 合并
+    #
+    def getElementsCenterAlignMerged(elements:list):
+        cacheKey = "ElementsCenterAlignMerged("+(",".join(map(lambda e:e.name,elements)))+")"
+        if cacheKey in ImageElement.cached:
+            #print("[get2ElementsCenterAlignMerged]使用缓存 %s" % cacheKey)
+            return ImageElement.cached[cacheKey]
+        image = np.full(elements[0].image.shape, 255, np.uint8)
+        height,width = image.shape
+        x0,y0 = int((width+0.5)/2),int((height+0.5)/2)
+        for e in elements:
+            x,y = x0-int((e.ex-e.x0+0.5)/2),y0-int((e.ey-e.y0+0.5)/2)
+            dst = image[y:y+e.ey-e.y0,x:x+e.ex-e.x0]
+            cv2.bitwise_and(e.image[e.y0:e.ey,e.x0:e.ex],dst,dst=dst,mask=None)
+        ImageElement.cached[cacheKey] = image
+        return image
+    
     """
     def getXORImage1(elements:list):
         cacheKey = "XORImage("+(",".join(map(lambda e:e.name,elements)))+")"
@@ -1383,8 +1403,51 @@ class ImageElement:
         ImageElement.cached[cacheKey] = rel
         return  rel
     
+    #
+    # 检测当前 图形 是否 为 正 多变形
+    #
+    def getPolygonPoints(self)->list:
+        try:
+            return self.__nPolygonPoints
+        except AttributeError as e:
+            pass
+        self.__nPolygonPoints = []
+        if self.blackPixelCount==0:
+            return self.__nPolygonPoints
+        img = cv2.bitwise_not(self.image,mask=None)
+        contours = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if len(contours)!=2 or len(contours[0])!=1:
+            raise BaseException("???")
+        contour = contours[0][0]
+        epsilon = 0.01 * cv2.arcLength(contours[0][0], True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+        for p in approx:
+            self.__nPolygonPoints.append(p[0])
+        M = cv2.moments(approx)
+        if M["m00"] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            self.__nPolygonCenter = (cX, cY)
+        else:
+            self.__nPolygonCenter = None    
+        return self.__nPolygonPoints
     
-
+    def isRegularPolygon(self)->int:
+        polygonPoints = self.getPolygonPoints()
+        if  len(polygonPoints)<=2 or self.__nPolygonCenter==None :
+            return 0
+        cx,cy = self.__nPolygonCenter
+        r0 = -1
+        for x,y in polygonPoints:
+            r = math.sqrt((x-cx)**2+(y-cy)**2)
+            #print("r = ",r)
+            if r0 <0:
+                r0 = r
+            elif abs(r-r0)<3:
+                continue
+            elif abs(r-r0)/r>0.01:
+                return False
+        return True      
         
 
 # END class ImageElement
@@ -2072,16 +2135,18 @@ class Images2:
     def  isImgSame2SwappedElements(self)->bool:
         if len(self.img1Elements)!=2 or len(self.img2Elements)!=2 :
             return
-        
+        idxMap = self.getImgElementsEqualsIdxMap() # img1Elements[?] 在 img2Elements 对应的位置
+        #print("idxMap = %s" % idxMap)
+        if idxMap==None: return False
         img1X1,img1Y1 = self.img1Elements[0].getCenter()
-        img2X2,img2Y2 = self.img2Elements[1].getCenter()
-
+        img2X2,img2Y2 = self.img2Elements[idxMap[1]].getCenter()
+        #print("%d,%d : %d,%d " % (img1X1,img1Y1,img2X2,img2Y2))
         if abs(img1X1-img2X2)>2 or abs(img1Y1-img2Y2)>2:
             return False
 
         img1X2,img1Y2 = self.img1Elements[1].getCenter()
-        img2X1,img2Y1 = self.img2Elements[0].getCenter()
-
+        img2X1,img2Y1 = self.img2Elements[idxMap[0]].getCenter()
+        #print("%d,%d : %d,%d " % (img1X2,img1Y2,img2X1,img2Y1))
         #print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X1,img1Y1,img2X2,img2Y2))
         #print("图形1 = (%f,%f)  图形2 = (%f,%f) " %(img1X2,img1Y2,img2X1,img2Y1))
         return abs(img1X2-img2X1)<=2 or abs(img1Y2-img2Y1)<=2
@@ -2581,6 +2646,7 @@ class Agent:
     SCORETYPE2_ROTATE = 0x05000
     SCORETYPE2_PIXCHANED = 0x0600
     SCORETYPE2_OUTTERSIMILAR = 0x0700
+    SCORETYPE2_VERTICES = 0x0700
     #
     #  计算 2x2 的图形 两行 或  两列 之间 属性匹配程度 的 得分
     #     原理是   图A -> 图B 之间某些元素使用了某一个转换规则(IMGTRANSMODE_EQ,IMGTRANSMODE_FLIPH,IMGTRANSMODE_FILLED 等)变换等到
@@ -2611,6 +2677,7 @@ class Agent:
         caseCheckFilled = True
         caseCheckRota45 = True
         caseOuterSharpCmp = True
+        caseVertices = True
         allElementsMatchedTransMode = []  # indexed by elementIdx
         for elementIdx in range( minElementCount ):
             elementsMatchedTransMode = []
@@ -2642,6 +2709,7 @@ class Agent:
                     continue
                 caseCheckRota45 = False
                 caseOuterSharpCmp = False
+                caseVertices = False
                 #if Agent._DEBUG and imgs2Name=="C6":
                 #    print("%s : 满足变换规则 %s" %(imgs1Name,transInfo.transMode))
                 transInfo2 = imgsFrm2.getImgElementTrans(elementIdx,transInfo.transMode)
@@ -2677,6 +2745,7 @@ class Agent:
         #
         if caseOuterSharpCmp:
             if imgsFrm1.isImgElementsOutterSharpMatched() and imgsFrm2.isImgElementsOutterSharpMatched():
+                caseVertices = False
                 score = 4
                 desc2 = ""
                 if imgsFrm1.getImgElementCount()==1 and imgsFrm2.getImgElementCount()==1:
@@ -2769,7 +2838,6 @@ class Agent:
                 scoreAddTo.addScore(2* scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE2_PIXCHANED,"两组元素增减个数相同")
                 # Challenge Problem B-03 : 需要 较高的 分数, 
 
-
             """
             filledFlags =  ImageElement.getImagesFilledFlags(imgsFrm1.img1Elements) #[elementIdx].isFilledImage()
             if (filledFlags==1 or filledFlags==2 )  \
@@ -2778,6 +2846,19 @@ class Agent:
                 and filledFlags==ImageElement.getImagesFilledFlags(imgsFrm2.img2Elements) :
                     scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两组元素全为填充图" if filledFlags==1 else "两组元素全为非填充图") 
             """            
+        #
+        # Challenge B-08
+        #
+        if  caseVertices and elementCountDiff1==0  and elementCountDiff2==0 and minElementCount==1 :
+            #print("检测 多边形 ... %s-%s" %(imgs1Name,imgs2Name))
+            verticesA = len(imgsFrm1.img1Elements[0].getPolygonPoints())
+            verticesB = len(imgsFrm1.img2Elements[0].getPolygonPoints())
+            if verticesA!=verticesB :
+                verticesC = len(imgsFrm2.img1Elements[0].getPolygonPoints())
+                if  verticesA!=verticesC and verticesA-verticesB==verticesC-len(imgsFrm2.img2Elements[0].getPolygonPoints()):
+                    scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE2_VERTICES,"图形顶点数变化趋势一致")
+            
+
 
         #
         # Challenge Problem B-04 : 区答案 4,6
@@ -2796,6 +2877,7 @@ class Agent:
             #if eqTrans1.matched!=eqTrans2.matched:
 
             #scoreFactor
+        
 
     def calculateImages2MatchScore_2(self,imgs1Name,imgs2Name,scoreAddTo:AnswerScore,scoreWeight=1): 
         imgsFrm1 = self.getImages2(imgs1Name)
@@ -2807,11 +2889,11 @@ class Agent:
         r2 = imgsFrm2.getImagePixelRatio()
         diff = abs(r1-r2)
         if  diff< 0.05:
-            scoreAddTo.addScore(3,imgs1Name,imgs2Name,0,"两图片素个数变化率相差<0.05") 
+            scoreAddTo.addScore(1,imgs1Name,imgs2Name,0,"两图片素个数变化率相差<0.05",1) 
         elif diff < 0.1:
-            scoreAddTo.addScore(2,imgs1Name,imgs2Name,0,"两图片像素个数变化率相差<0.1") 
+            scoreAddTo.addScore(0.5,imgs1Name,imgs2Name,0,"两图片像素个数变化率相差<0.1",1) 
         elif diff < 0.15:
-            scoreAddTo.addScore(1,imgs1Name,imgs2Name,0,"两图片像素个数变化率相差<0.15") 
+            scoreAddTo.addScore(0.2,imgs1Name,imgs2Name,0,"两图片像素个数变化率相差<0.15",1) 
 
 
 
@@ -2838,6 +2920,8 @@ class Agent:
     SCORETYPE3_MERGE_LR          =     0x00100   #   
     SCORETYPE3_BITOP             =     0x0D000
     SCORETYPE3_XOR               =     0x0E000
+    SCORETYPE3_VERTICES          =     0x0F000
+    SCORETYPE3_LRMOVED           =     0x10000 # C-09
     #
     # 计算 两帧 图片(如 ABC 与 GH1) 之间 属性匹配程度的 得分
     #    self.calculateImages3MatchScore("ABC") 
@@ -2874,6 +2958,8 @@ class Agent:
         caseWholeFliped = True
         caseCheckIncedEq = True #  A  G 的每个元素==A, Challenge Problem D-10 : ADG / CF7
         caseElementCountInc1Mathched = True 
+        caseVertices = True # 检测 多变形
+        caseMovedMerge = True  # C-09 : A+C => B 
         #  
         # 判断 两组 图片 为 相同组合 或 完成 相同
         # 例子:  
@@ -2896,6 +2982,8 @@ class Agent:
             caseWholeFliped = False
             caseCheckIncedEq  = False
             caseElementCountInc1Mathched = False
+            caseVertices = False
+            caseMovedMerge = False
             if self.getImages2(imgs2Name[0:2]).isImgElementsEqualsOrSimilar() and self.getImages2(imgs2Name[1:3]).isImgElementsEqualsOrSimilar():
                 # GH? 图形相同, ABC 也相同 ( 因为 同组合 ) : A==B and B==C
                 if self.getImages2(imgs2Name[0:2]).isImgElementsEquals() and self.getImages2(imgs2Name[1:3]).isImgElementsEquals():
@@ -3141,6 +3229,7 @@ class Agent:
                     break
                 idxOfImgs2.append(j)
             if len(idxOfImgs2)==3:
+                caseVertices = False
                 score = 3
                 scorpType = Agent.SCORETYPE3_OUTEREQ1
                 filledFlags1 =  imgsFrm1.getAllImagesFilledFlags()
@@ -3254,6 +3343,7 @@ class Agent:
                         caseXorCmp = False
                         caseBitOPCmp = False
                         caseLRMerge = False
+                        caseVertices = False
                     break
 
         #
@@ -3266,7 +3356,42 @@ class Agent:
                     scoreAddTo.addScore( 6 * scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE3_MERGE|Agent.SCORETYPE3_MERGE_LR,"第%d和%d图片左右合并==第%d个图片"%(abc[0]+1,abc[1]+1,abc[2]+1))
                     caseXorCmp = False
                     caseBitOPCmp = False
+                    caseVertices = False
             #isMatchedLRMerged
+
+        #
+        # 多边形 Challenge E-05;
+        #
+        if caseVertices and len(imgsFrm1.img1Elements)==1 and  elementCountIncAB==0 and  elementCountIncBC==0 and len(imgsFrm2.img1Elements)==1 and elementCountIncGH==0 and elementCountIncHI==0:
+            verticesA = len(imgsFrm1.img1Elements[0].getPolygonPoints())
+            verticesB = len(imgsFrm1.img2Elements[0].getPolygonPoints())
+            """
+            print("检测 多边形 ... %s-%s : %d %d %d; %d %d %d" %(imgs1Name,imgs2Name,verticesA,verticesB,len(imgsFrm1.img3Elements[0].getPolygonPoints()),\
+                                len(imgsFrm2.img1Elements[0].getPolygonPoints()),\
+                                len(imgsFrm2.img2Elements[0].getPolygonPoints()),\
+                                len(imgsFrm2.img3Elements[0].getPolygonPoints()),\
+                                                                                                    )) 
+            """                                                                                        
+            if verticesB>verticesA \
+                  and verticesB-verticesA==len(imgsFrm2.img2Elements[0].getPolygonPoints())-len(imgsFrm2.img1Elements[0].getPolygonPoints())\
+                  and len(imgsFrm1.img3Elements[0].getPolygonPoints()) - verticesB==len(imgsFrm2.img3Elements[0].getPolygonPoints())-len(imgsFrm2.img2Elements[0].getPolygonPoints()):
+                scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE3_VERTICES,"图形顶点数变化趋势一致")
+
+        #
+        #  C -09:
+        #     
+        #print("caseMovedMerge %s:%s %s:%s"  %(imgs1Name,self.getImages2(imgs1Name[0]+imgs1Name[2]).isImgSame2SwappedElements(),imgs2Name,self.getImages2(imgs2Name[0]+imgs1Name[2]).isImgSame2SwappedElements()))
+        if  caseMovedMerge and len(imgsFrm1.img1Elements)==2 and len(imgsFrm1.img2Elements)==1 and len(imgsFrm1.img3Elements)==2 \
+                           and len(imgsFrm2.img1Elements)==2 and len(imgsFrm2.img2Elements)==1 and len(imgsFrm2.img3Elements)==2 \
+                           and self.getImages2(imgs1Name[0]+imgs1Name[2]).isImgSame2SwappedElements()  \
+                           and self.getImages2(imgs2Name[0]+imgs2Name[2]).isImgSame2SwappedElements()  \
+                            :
+            img = ImageElement.getElementsCenterAlignMerged(imgsFrm1.img1Elements)
+            diff,_,_ = countImageDiffRatio(img,imgsFrm1.img2Elements[0].image)
+            if diff<0.05 and countImageDiffRatio(ImageElement.getElementsCenterAlignMerged(imgsFrm2.img1Elements),imgsFrm2.img2Elements[0].image):
+                scoreAddTo.addScore(5*scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE3_LRMOVED,"元素左右移动变换")
+                #print("caseMovedMerge %s %s............." %(imgs1Name,imgs2Name))
+            pass
 
         #
         # 三个图形 异或 后, 相同  : D-09 ???
@@ -3459,11 +3584,13 @@ class Agent:
     def solve_3x3(self):
         # 去除一些 单独 的规则:
         # (1) count(SCORETYPE3_XOR) >=5 : 排除 Challenge Problem E-12 的 XOR
-        # (2) count(SCORETYPE3_EQ1) >=2  : 排除 Challenge Problem E-12 的  (??? 误排除了 Challenge C-10 [ADG-CF3])
+        # (2) count(SCORETYPE3_EQ1) >=3  : 排除 Challenge Problem E-12 的  (??? 误排除了 Challenge C-10 [ADG-CF3])
+        #                                  排除 Challenge Problem E-05 的
         #
         rulesChecks = [\
-                (0xff000|Agent.SCORETYPE3_EQ1_1,Agent.SCORETYPE3_EQ1,2 ),\
-                (0xff000,Agent.SCORETYPE3_XOR,5 )\
+                (0xff000|Agent.SCORETYPE3_EQ1_1,Agent.SCORETYPE3_EQ1,3 ),\
+                (0xff000,Agent.SCORETYPE3_XOR,5 ),\
+                (0xff000,Agent.SCORETYPE2_VERTICES,4 )
                 ]  
         allAnswersScore = []
         for answer in self.images:
