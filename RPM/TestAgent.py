@@ -2,6 +2,7 @@
 #
 # python D:\snsoftn10\snadk-srcx\python-projects\RPM-Project-Code\TestAgent.py
 # python3 /snsoftn10/snadk-srcx/python-projects/RPM-Project-Code/TestAgent.py
+# python3 $SnadkSrcx/python-projects/RPM-Project-Code/TestAgent.py
 #
 
 import random
@@ -17,7 +18,7 @@ from Agent import Agent,APPPATH
 #,countImagesDiff,countImagesXOR
 from Agent import ImageElement,Image1
 from Agent import countImageDiffRatio,countImageDiff
-from Agent2 import Agent2
+#from Agent2 import Agent2
 from RavensFigure import RavensFigure
 from RavensProblem import RavensProblem
 from RavensObject import RavensObject
@@ -166,6 +167,7 @@ def  showSplitImages(problemId,imgId):
     for e in imgs:
         printImageElement(e,problemId)
         i += 1
+    agent.getImageElements(imgId)    
 
 def testHLineSegments(problemId,imgId):
     agent = prepareAgent(problemId)
@@ -709,7 +711,10 @@ def main():
     #showSplitImages("C-09","2")
     #showSplitImages("Challenge E-02","A")
     #showSplitImages("Challenge D-09","C")
+    #showSplitImages("Challenge D-10","5")
     #showSplitImages("Challenge E-11","H")
+    #showSplitImages("Challenge C-07","C")
+    #showSplitImages("Challenge C-08","A")
     #testFlipImage("B-03","A") # ** 
     #testFlipImage("B-07","9") 
     #testFlipImage("B-05","A") 
@@ -912,6 +917,7 @@ def main():
     #testAgentSolve("C-08")
     #testAgentSolve("C-04")
     #testAgentSolve("C-07")  #[ABC-GH2]两组图形上下翻转关系
+    #testAgentSolve("C-08")  #[ABED-5HEC]000000:对称
     #testAgentSolve("C-09") #???  
     #testAgentSolve("D-02")  # [ABC-GH1]两组图形具有相同组合
     #testAgentSolve("D-03")
@@ -967,7 +973,7 @@ def main():
     #**********testAgentSolve("Challenge B-02")  # [AB-C1]满足旋转315度 
     #*************testAgentSolve("Challenge B-08")   #  顶点 规律 test2:2
 
-    #testAgentSolve("C-08") # 整体对称 答案 = 2,3 (!!!期望结果 =5);  test2:1
+    #************testAgentSolve("C-08") # 整体对称 答案 = 2,3 (!!!期望结果 =5);  test2:1
     #***********testAgentSolve("C-09") # 多结果  答案 = 2,3
     #testAgentSolve("C-12") # ??? 结果 = 5 (!!!期望结果 =8) ;  test2:3
 
@@ -975,13 +981,13 @@ def main():
     #testAgentSolve("E-12") # ?????  答案 = 1,2,8;  (!!!期望结果 =6) ; test2 ok
 
     #*********testAgentSolve("Challenge C-04") # + 字=> # 字
-    #testAgentSolve("Challenge C-07") #多结果  答案 = 3,7
-    #testAgentSolve("Challenge C-08") # 整体对称, 同 C-8 结果 = 4 (!!!期望结果 =5) ; test2:7
+    #**************testAgentSolve("Challenge C-07") #多结果  [ABC-GH3]003100:两组图形元素个数变化按同倍数递增,且第一组与第二组对应项有相同元素
+    #************testAgentSolve("Challenge C-08") # 整体对称, 同 C-8 结果 = 4 (!!!期望结果 =5) ; test2:7
 
     #testAgentSolve("Challenge D-01") #?????未找到规则 答案 = 1,2,5,6
     #testAgentSolve("Challenge D-05") #?????未找到规则  答案 = 2,3
-    #testAgentSolve("Challenge D-08") #  答案 = 1,2
-    #testAgentSolve("Challenge D-10") #  答案 = 5,7
+    #testAgentSolve("Challenge D-08") #  答案 = 1,2 ; 旋转 90 后外形相似
+    #*************testAgentSolve("Challenge D-10") #  答案 = 5,7
     #testAgentSolve("Challenge D-11") #?????未找到规则
 
     #*****testAgentSolve("Challenge E-05") # 顶点 规律 ;  4,6,8,10,12 个数的顶点
@@ -1003,14 +1009,14 @@ def main():
 
     Agent._DEBUG = False
     #testSolveProblemSet("Basic Problems B")  #  ok
-    #testSolveProblemSet("Challenge Problems B")  # 8
+    #testSolveProblemSet("Challenge Problems B")  # ok
 
-    #testSolveProblemSet("Basic Problems C") #   : 08 ,12 
+    #testSolveProblemSet("Basic Problems C") #   : 12 
     #testSolveProblemSet("Basic Problems D") #   : ok
     #testSolveProblemSet("Basic Problems E") #      12
-    #testSolveProblemSet("Challenge Problems C")  #  8 ;    ??? 7
-    #testSolveProblemSet("Challenge Problems D")  #  1,11; ??5. 8,10,
-    #testSolveProblemSet("Challenge Problems E")  # ::06,08,09,10
+    #testSolveProblemSet("Challenge Problems C")  #  ok ;    
+    #testSolveProblemSet("Challenge Problems D")  #  1,11; ?? 5. 8,
+    testSolveProblemSet("Challenge Problems E")  # ::06,08,09,10
     return
 
     
@@ -1025,14 +1031,20 @@ def main():
 
 def tempTest():
     #agent = prepareAgent("B-06")
-    agent = prepareAgent("Challenge E-11")
-    imgA = agent.getImage1("G")
-    imgB = agent.getImage1("H")
-    for e1,e2 in zip(imgA.getImageElements(),imgB.getImageElements()[0:len(imgA.getImageElements())]):
-        #print("%s %s"% (e1.name,e2.name))
-        similar,similar2,pixMatched,scale = e1.getImageElementSimilarScale(e2)
-        print("%s %s 相似(similar) = %f similar2=%f pixMatched=%s, 比例 = %f" %(e1.name,e2.name,similar,similar2,pixMatched,scale))    
+    agent = prepareAgent("C-08")
+    #agent = prepareAgent("Challenge D-10")
+    #imgA = agent.getImage1("G")
+    #imgB = agent.getImage1("H")
+    #imgC = agent.getImage1("C")
+    imgE = agent.getImage1("E")
+    img5 = agent.getImage1("5")
+    #for e1,e2 in zip(imgA.getImageElements(),imgB.getImageElements()[0:len(imgA.getImageElements())]):
+    #    #print("%s %s"% (e1.name,e2.name))
+    #    similar,similar2,pixMatched,scale = e1.getImageElementSimilarScale(e2)
+    #    print("%s %s 相似(similar) = %f similar2=%f pixMatched=%s, 比例 = %f" %(e1.name,e2.name,similar,similar2,pixMatched,scale))    
     #imagA_Rota270 = imgA.getImageElements()[0].getRotateImage("ROTATE315")
+    #imgC_Rota270 = imgC.asImgElement().getRotateImage("ROTATE170")
+    #printImageElement(imgC_Rota270,"")
     #img = agent.getImages2(img2Id)
     #imgsFrm1.img1.getRotateImage(checkAllRota).isEquals(imgsFrm1.img2.asImgElement()) 
     #printImageElement(imagA_Rota270,"")
@@ -1048,6 +1060,20 @@ def tempTest():
     #print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
     #transInfo = img2.getImgElementTrans(0,"FLIPH")  # r similar,scale FLIPH FLIPV
     #print(" %s: %s  %f %f " %(transInfo.transMode,transInfo.matched,transInfo.similar,transInfo.scale))
+    #imgABC = agent.getImages3("ABC")
+    #imgGH3 = agent.getImages3("GH3")
+    #v = imgABC.img1Elements[0].isEqualsAllElements(imgABC.img1Elements[1:]+imgGH3.img1Elements) 
+    #print(v)
+    #v = imgABC.img2Elements[0].isEqualsAllElements(imgABC.img2Elements[1:]+imgGH3.img2Elements) 
+    #print(v)
+    #v = imgABC.img3Elements[0].isEqualsAllElements(imgABC.img3Elements[1:]+imgGH3.img3Elements,0.85,2,30) 
+    #print(v)
+    height,width = imgE.image.shape
+    cy, cx = height/2,width/2
+    imgE_1 = imgE.getImageElements(lambda e:e.y0>cy and e.x0>cx)
+    print("imgE_1.len = ",len(imgE_1))
+    v = imgE_1[0].isEqualsAllElements(img5.getImageElements())
+    print(v)
 
 #loadProblemByID(problemId)
 def  tempTest1(problemId,imgId):

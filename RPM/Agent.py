@@ -3,7 +3,6 @@ import numpy as np
 import os
 import math
 from itertools import product
-from idlelib.config import _warn
 
 #from CV2Utils import CV2Utils 
 
@@ -100,6 +99,11 @@ def _compare3(v1,v2,v3)->bool:
     if v3>0 and abs((v1-v3) / v3 )<0.01 and abs((v2-v3) / v3 )<0.01:
         return 0
     return -1
+
+def conditionAnd(values:list,test)->bool:
+    for v in values:
+        if( not test(v)) : return False
+    return True
 
 def countImageDiff(image1,image2):
     return cv2.countNonZero(cv2.absdiff(image1,image2))
@@ -386,7 +390,7 @@ class ImageElement:
     def isBlackPixelEquals(self,otherImgElement,threadhold=20):
         n1 = self.blackPixelCount
         n2 = otherImgElement.blackPixelCount
-        return abs(n1-n2) <= 20 
+        return abs(n1-n2) <= threadhold 
         #if n1==0: return n2<10
         #print("isBlackPixelEquals %s.blackPixelCount=%d,%s.blackPixelCount=%d" %(self.name,n1,otherImgElement.name,n2))
         #return abs(n1-n2)*2/(n1+n2) <= ratioThreadhold;
@@ -844,6 +848,7 @@ class ImageElement:
     
     def isEqualsAllElements(self,elements,similarTh=0.90,hwThreadhold=2,pixelThreadhold=20)->bool:
         for e in elements:
+            #print("isImageShapeMatched = %s, isBlackPixelEquals=%s" % (self.isImageShapeMatched(e,hwThreadhold),self.isBlackPixelEquals(e,pixelThreadhold) ))
             if hwThreadhold>0 and not self.isImageShapeMatched(e,hwThreadhold) : return False
             if pixelThreadhold>0 and not self.isBlackPixelEquals(e,pixelThreadhold) : return False
             similar,_,_,_ = self.getImageElementSimilarScale(e)
@@ -1334,6 +1339,16 @@ class ImageElement:
         ImageElement.cached[cacheKey] = imgElement
         return imgElement
     
+    def countImageDiff(self,otherElement)->int:
+        height1,width1 = self.image.shape
+        height2,width2 = otherElement.image.shape
+        w = min(max(self.ex-self.x0,otherElement.ex-otherElement.x0),width1-self.x0,width2-otherElement.x0)
+        h = min(max(self.ey-self.y0,otherElement.ey-otherElement.y0),height1-self.y0,height2-otherElement.y0)
+        #print("[%s]X: %d-%d; Y0 : %d-%d; [%s]X: %d-%d; Y0 : %d-%d ; w=%d,h=%d" %(self.name,self.x0,self.ex,self.y0,self.ey,otherElement.name,otherElement.x0,otherElement.ex,otherElement.y0,otherElement.ey,w,h))
+        img1 = self.image[self.y0:self.y0+h,self.x0:self.x0+w]
+        img2 = otherElement.image[otherElement.y0:otherElement.y0+h,otherElement.x0:otherElement.x0+w]
+        return countImageDiff(img1,img2)
+
     #
     # 按 中点 对齐 合并
     #
@@ -1507,13 +1522,19 @@ class Image1:
         self._blackPixelCount = -1
         self._elementsHeight = -1
         self._elementsWidth = -1
-    def getImageElements(self)->list:
+    def getImageElements(self,filter=None)->list:
         try:
-            return self._imgElements  
+            _ = self._imgElements  
+            #print("缓存..")
         except AttributeError as e:
-            pass
-        self._imgElements = Image1.splitImage(self.image,self.name+"[%d]")
-        return self._imgElements  
+            self._imgElements = Image1.splitImage(self.image,self.name+"[%d]")
+        if filter==None: return self._imgElements
+        a = []
+        for e in self._imgElements:
+            if filter(e) : a.append(e)
+        return a  
+    
+    #
     
     def getImageElement(self,idx:int)->ImageElement:
         return self.getImageElements()[idx]     
@@ -1521,6 +1542,7 @@ class Image1:
      # 将图片(按像素相连)分隔成多个元素, 相连的像素分在一个元素组中
      #
     def splitImage(image,nameFormat:str)->list:
+        #print("--------splitImage %s----" % nameFormat)
         height ,width = image.shape
         uf = UFarray() # 
         uf.makeLabel() # 忽略 0
@@ -3104,10 +3126,18 @@ class Agent:
                     scoreAddTo.addScore(2 * scoreWeight ,imgs1Name,imgs2Name,Agent.SCORETYPE3_SUBELEMENTS,"子集关系")
                 pass           
         elif len(imgsFrm1.img1Elements)>0 \
-            and  len(imgsFrm1.img1Elements)>0 and len(imgsFrm2.img1Elements)>0 \
+            and len(imgsFrm1.img1Elements)>0 and len(imgsFrm2.img1Elements)>0 \
             and len(imgsFrm1.img2Elements)/len(imgsFrm1.img1Elements)==len(imgsFrm2.img2Elements)/len(imgsFrm2.img1Elements) \
             and len(imgsFrm1.img3Elements)/len(imgsFrm1.img1Elements)==len(imgsFrm2.img3Elements)/len(imgsFrm2.img1Elements) : 
-            scoreAddTo.addScore(4 * scoreWeight ,imgs1Name,imgs2Name,Agent.SCORETYPE3_ECCHANGE|Agent.SCORETYPE3_ECCHANGE_MUTIPLE,"两组图形元素个数变化按同倍数递增")  #C-03 :
+            score = 4   
+            desc = "两组图形元素个数变化按同倍数递增" #C-03 
+            #Challenge Problem C-07 :  C-07  图 C -blackPoints 相差 >20
+            if      imgsFrm1.img1Elements[0].isEqualsAllElements(imgsFrm1.img1Elements[1:]+imgsFrm2.img1Elements,0.85,2,30)  \
+                and imgsFrm1.img2Elements[0].isEqualsAllElements(imgsFrm1.img2Elements[1:]+imgsFrm2.img2Elements,0.85,2,30)  \
+                and imgsFrm1.img3Elements[0].isEqualsAllElements(imgsFrm1.img3Elements[1:]+imgsFrm2.img3Elements,0.85,2,30) :
+                   score += 1   
+                   desc += ",且第一组与第二组对应项有相同元素" #Challenge Problem C-07 : 
+            scoreAddTo.addScore(score * scoreWeight ,imgs1Name,imgs2Name,Agent.SCORETYPE3_ECCHANGE|Agent.SCORETYPE3_ECCHANGE_MUTIPLE,desc)  #C-03 :
         #
         #  元素 比例的 ( C-02 的 答案案 1,4 就因为 比例 不同
         #            
@@ -3297,7 +3327,7 @@ class Agent:
         if  caseElementCountInc1Mathched:
             elementCounts1 = [len(imgsFrm1.img1Elements),len(imgsFrm1.img2Elements),len(imgsFrm1.img3Elements)]
             elementCounts1.sort()
-            #print("elementCounts1 = ",elementCounts1)
+            #print("%s : elementCounts1 = %s " %( imgsFrm1.name,elementCounts1))
             if elementCounts1[1]==elementCounts1[0]+1 and elementCounts1[2]==elementCounts1[0]+2:
                 elementCounts2 = [len(imgsFrm2.img1Elements),len(imgsFrm2.img2Elements),len(imgsFrm2.img3Elements)]
                 elementCounts2.sort()
@@ -3308,11 +3338,30 @@ class Agent:
         #
         #  Challenge Problem D-10 : A-C 相似, 
         #         
-        #if caseTransMatched \
-        #        and len(imgsFrm1.img1Elements)==1 and elementCountIncAB==elementCountIncGH and elementCountIncBC==0 and elementCountIncHI==0 \
-        #        and imgsBH.isImgElementsEqualsOrSimilar() :
-            #for transMode in [IMGTRANSMODE_ROTATE090,IMGTRANSMODE_ROTATE270,IMGTRANSMODE_ROTATE180]:
-            #imgsAG.getAllImgElementTrans()
+        #print("%s/%s : caseTransMatched=%d; %d %d" %(imgs1Name,imgs2Name,caseTransMatched,imgsFrm1.img3.asImgElement().blackPixelCount,imgsFrm2.img3.asImgElement().blackPixelCount))
+        if caseTransMatched \
+                and len(imgsFrm1.img1Elements)==1 and elementCountIncAB==elementCountIncGH and elementCountIncBC==elementCountIncHI \
+                and abs(imgsFrm1.img1.asImgElement().blackPixelCount-imgsFrm2.img1.asImgElement().blackPixelCount)<20 \
+                and imgsBH.isImgElementsEquals() :
+
+              #  and abs(imgsFrm1.img3.asImgElement().blackPixelCount-imgsFrm2.img3.asImgElement().blackPixelCount)<20 \
+                
+            for transMode in [IMGTRANSMODE_ROTATE090,IMGTRANSMODE_ROTATE270]: #IMGTRANSMODE_ROTATE180
+                imgA_Rotated =  imgsFrm1.img1.asImgElement().getRotateImage(transMode)
+                #diff1x = countImageDiff(imgA_Rotated.image,imgsFrm2.img1.image)
+                diff1 = imgA_Rotated.countImageDiff(imgsFrm2.img1.asImgElement())
+                #print("%s/%s[%s-%s] (%s) : diff1Count=%d, /%d = %f , %f ; %d " %(imgs1Name,imgs2Name,imgsFrm1.img1.name,imgsFrm2.img1.name,transMode,diff1,imgsFrm1.img1.asImgElement().blackPixelCount,diff1/imgsFrm1.img1.asImgElement().blackPixelCount,diff1/imgA_Rotated.getTotalPixel(),diff1x))
+                if  diff1/imgA_Rotated.getTotalPixel() < 0.015:
+                    imgC_Rotated =  imgsFrm1.img3.asImgElement().getRotateImage(transMode)
+                    #diff2x = countImageDiff(imgC_Rotated.image,imgsFrm2.img3.image)
+                    diff2 = imgC_Rotated.countImageDiff(imgsFrm2.img3.asImgElement())
+                    #diff2 = countImageDiffCaseNeighbor(imgA_Rotated.image,imgsFrm2.img1.image)
+                    #print("     %s-%s (%s) : diff2=%d, / %d : %f %f ; %d" %(imgsFrm1.img3.name,imgsFrm2.img3.name,transMode,diff2,imgsFrm1.img3.asImgElement().blackPixelCount,diff2/imgsFrm1.img3.asImgElement().blackPixelCount,diff2/imgC_Rotated.getTotalPixel(),diff2x))
+                    if diff2/imgC_Rotated.getTotalPixel()<0.015:
+                        scoreAddTo.addScore( 0.5* scoreWeight,imgs1Name,imgs2Name,0,"第二组元素相等,第一与第三组元素满足旋转%s度"%transMode[6:])
+                        break
+                pass
+                #imgsAG.getAllImgElementTrans()
         #    pass         
         caseLRMerge  = caseAddOrSubEq  # 满足 左右合并,  Challenge Problem E-04
 
@@ -3463,7 +3512,61 @@ class Agent:
                 scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两图片元素位置(距离)有相同规律") 
         """
 
-              
+    def calculateImages3MatchScore_3(self,answerId:str,scoreAddTo:AnswerScore):
+        imgA = self.getImage1("A")
+        height,width = imgA.image.shape
+        cy, cx = height/2,width/2
+        #print("B: %d x0=%d, D : %d,y0=%d ; E=%d" % (len(self.getImage1("B").getImageElements(lambda e:e.x0<cx)),self.getImage1("B").getImageElement(0).x0,\
+        #                                            len(self.getImage1("D").getImageElements(lambda e:e.y0<cy)),self.getImage1("D").getImageElement(0).y0,\
+        #                                            len(self.getImage1("E").getImageElements(lambda e:e.x0<cx and e.y0<cy))))
+         # C-08 特殊处理
+        if len(imgA.getImageElements())==0 \
+            and len(self.getImage1("E").getImageElements(lambda e:e.x0<cx and e.y0<cy))==0 \
+            and len(self.getImage1("B").getImageElements(lambda e:e.x0<cx))==0 \
+            and len(self.getImage1("D").getImageElements(lambda e:e.y0<cy))==0 :
+            #a = self.getImage1("E").getImageElements()
+            #for e in a:
+            #    print("%s : x0=%d>%d,y0=%d>%d" % (e.name,e.x0,cx,e.y0,cy))
+            imgE_RDElements = self.getImage1("E").getImageElements(lambda e:e.y0>cy and e.x0>cx)
+            #print("[%s]检测对称....: %d; %s,%s,%s" % (answerId,len(imgE_RDElements),imgE_RDElements[0].isEqualsAllElements(self.getImage1("F").getImageElements(lambda e:e.y0>cy)),imgE_RDElements[0].isEqualsAllElements(self.getImage1("H").getImageElements(lambda e:e.x0>cx)),imgE_RDElements[0].isEqualsAllElements(self.getImage1(answerId).getImageElements())) )
+            if len(imgE_RDElements)==1 \
+                and len(self.getImage1(answerId).getImageElements())==len(self.getImage1("F").getImageElements()) \
+                and len(self.getImage1(answerId).getImageElements())==len(self.getImage1("H").getImageElements()) \
+                and imgE_RDElements[0].isEqualsAllElements(self.getImage1("F").getImageElements(lambda e:e.y0>cy))\
+                and imgE_RDElements[0].isEqualsAllElements(self.getImage1("H").getImageElements(lambda e:e.x0>cx))\
+                and imgE_RDElements[0].isEqualsAllElements(self.getImage1(answerId).getImageElements()):
+                    scoreAddTo.addScore( 5 ,"ABED",answerId+"HEC",0,"对称" )
+                    #print("[%s]检测对称...." % answerId)
+
+            """
+            if len(imgE_RDElements)>10 \
+                 and conditionAnd(imgE_RDElements,lambda e:e.getWidth()<10 and e.getHeight()<10) :
+                imgF_DElements = self.getImage1("F").getImageElements(lambda e:e.y0>cy)
+                imgH_RElements = self.getImage1("H").getImageElements(lambda e:e.x0>cx)
+                print("[%s]检测对称...%d,%d,%d " % (answerId,len(imgE_RDElements),len(imgF_DElements),len(imgH_RElements)))
+                pass
+            """    
+
+        # Challenge Problem C-08
+        if len(imgA.getImageElements())==1 :
+            imgA0 = imgA.getImageElement(0)
+            def __blackRatio(img):
+                h,w = img.shape
+                return (h*w-cv2.countNonZero(img)) / h*w
+            if imgA0.x0<15 and imgA0.y0<15 and imgA0.ex>imgA0.image.shape[1]-15 and imgA0.ey>imgA0.image.shape[0]-15 and imgA0.blackPixelCount/imgA0.getTotalPixel()>0.999 \
+                and __blackRatio(self.getImage1("B").image[imgA0.y0:imgA0.ey,imgA0.x0:int(cx)])>0.999 \
+                and __blackRatio(self.getImage1("D").image[imgA0.y0:int(cy),      imgA0.x0:imgA0.ex])>0.999 \
+                and __blackRatio(self.getImage1("E").image[imgA0.y0:int(cy),      imgA0.x0:int(cx)])>0.999 :
+                #print("[%s]检测对称...." % answerId)
+                imgE_RDElements = self.getImage1("E").getImageElements(lambda e:e.y0>cy and e.x0>cx)
+                if len(imgE_RDElements)>50 and conditionAnd(imgE_RDElements,lambda e:e.getWidth()<10 and e.getHeight()<10) :
+                    imgF_DElements = self.getImage1("F").getImageElements(lambda e:e.y0>cy)
+                    imgH_RElements = self.getImage1("H").getImageElements(lambda e:e.x0>cx)
+                    imgI_Elements = self.getImage1(answerId).getImageElements()
+                    if len(imgI_Elements) / len(imgE_RDElements) > 3.5 and len(imgF_DElements) / len(imgE_RDElements) > 1.9 and len(imgH_RElements) / len(imgE_RDElements) > 1.9:
+                        scoreAddTo.addScore( 5 ,"ABED",answerId+"HEC",0,"对称" )
+                        #print("[%s]检测对称...%d,%d,%d %d " % (answerId,len(imgE_RDElements),len(imgF_DElements),len(imgH_RElements),len(imgI_Elements)))
+                pass      
         #
         # XOR 的例子: D-11
         # 
@@ -3528,6 +3631,7 @@ class Agent:
             elif diff < 0.15:
                 scoreAddTo.addScore(0.5*scoreWeight,imgs1Name,imgs2Name,0,"两图片(%s与%s)像素个数变化率相差<0.15"%(id1,id2),1) 
         
+
 
     def _printAnswerScoreDetails(answerScore:AnswerScore)->None:
         if len(answerScore.scoreDetails)==0:
@@ -3628,9 +3732,10 @@ class Agent:
                 for d in answerScore.scoreDetails:
                     answerScore.execludeScores(matchRuleByMasktype)
 
+            #  C-08
+            self.calculateImages3MatchScore_3(answer,answerScore)
             allAnswersScore.append(answerScore)
 
-        
 
         answersScore = AnswerScore.getMaxScoreAnswers(allAnswersScore)
 
