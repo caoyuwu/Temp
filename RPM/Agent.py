@@ -86,6 +86,12 @@ def indexOf(list,value):
     except ValueError:    
         return -1
     
+def indexOfMatched(e,elements:list,match,excludeIdxs:list=None) ->int:  
+    for i in range(len(elements)):
+        if indexOf(excludeIdxs,i)>=0 : continue
+        if match(e,elements[i]): return i
+    return -1
+
     #
     # return 0 : v1==v2==v3
     #        1 : v1+v2==v3
@@ -1062,6 +1068,13 @@ class ImageElement:
         #    for x in range(self.getStartPointX(y)+1,self.getEndPointX(y)):
 
     #
+    # 类似  Challenge Problem D-11 中 A 的 图形
+    #
+    def isOpenedImage(self):
+        if self.getBlackPixelRatio() >0.1 : return False 
+        return self.isFilledImage()
+
+    #
     # return 2: 水平线填充; 1:垂直线; 3:斜线
     #
     def isLinesFielldImage(self):
@@ -1418,6 +1431,13 @@ class ImageElement:
         ImageElement.cached[cacheKey] = rel
         return  rel
     
+    def __getBitnotImg(self):
+        try:
+            return self.__bitnotImg
+        except AttributeError as e:
+            pass
+        self.__bitnotImg = cv2.bitwise_not(self.image,mask=None)    
+        return self.__bitnotImg
     #
     # 检测当前 图形 是否 为 正 多变形
     #
@@ -1429,15 +1449,16 @@ class ImageElement:
         self.__nPolygonPoints = []
         if self.blackPixelCount==0:
             return self.__nPolygonPoints
-        img = cv2.bitwise_not(self.image,mask=None)
+        img = self.__getBitnotImg() # cv2.bitwise_not(self.image,mask=None)
         contours = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours)!=2 or len(contours[0])!=1:
             raise BaseException("???")
         contour = contours[0][0]
-        epsilon = 0.01 * cv2.arcLength(contours[0][0], True)
+        epsilon = 0.01 * cv2.arcLength(contour, True)
         approx = cv2.approxPolyDP(contour, epsilon, True)
         for p in approx:
             self.__nPolygonPoints.append(p[0])
+        #print("%s : %s" %(self.name,self.__nPolygonPoints))
         M = cv2.moments(approx)
         if M["m00"] != 0:
             cX = int(M["m10"] / M["m00"])
@@ -1463,7 +1484,63 @@ class ImageElement:
             elif abs(r-r0)/r>0.01:
                 return False
         return True      
-        
+
+    def __getAllVerticesPoints(self)->list:
+        try:
+            return self._allVerticesPoints
+        except AttributeError as e:
+            pass
+        self._allVerticesPoints = []
+        img = self.__getBitnotImg()
+        contours, _ = cv2.findContours(img, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for contours1 in contours:
+            for contour in contours1 : #contours[0]:
+                epsilon = 0.01 * cv2.arcLength(contour, True)
+                approx = cv2.approxPolyDP(contour, epsilon, True)
+                #print("approx.len = ",len(approx))
+                #print("approx = ",approx)
+                #points = []
+                for p in approx:
+                    self._allVerticesPoints.append(p[0])
+        return self._allVerticesPoints
+
+
+    #
+    # 交叉点, Challenge Problem C-04
+    #     
+    def getCrossPoints(self)->list:
+        try:
+            return self.__crossPoints
+        except AttributeError as e:
+            pass
+        self.__crossPoints = []
+        allPoints = self.__getAllVerticesPoints()
+
+        n = len(allPoints)
+        added = [False for _ in range(n)]
+        for i in range(n):
+            if added[i] : continue
+            #x,y = polygonPoints[i]
+            pointsIdx = [i]
+            for j in range(i+1,n):
+                if added[j] : continue
+                x2,y2 = allPoints[j]
+                def __near(i2):
+                    x,y = allPoints[i2]
+                    return abs(x2-x)<10 and abs(y2-y)<10
+                if  conditionAnd(pointsIdx,__near):
+                    pointsIdx.append(j)
+            if len(pointsIdx)>=3:
+                sumX,sumY = 0,0
+                for j in pointsIdx:
+                    added[j] = True
+                    x,y = allPoints[j]
+                    sumX += x
+                    sumY += y
+                self.__crossPoints.append((sumX/len(pointsIdx),sumY/len(pointsIdx)))    
+        return self.__crossPoints
+            #added.append(_k)
+
 
 # END class ImageElement
 
@@ -2583,7 +2660,7 @@ class AnswerScoreDetail:
 #
 #  某个答案 对应的 可行度得分
 #  成员 int answer : 答案, 序号, 如 1,2, 等
-#  成员 float score : 可行度分数 
+#  成员 int score : 可行度分数 ,  1/1000 为单位
 #         
 class AnswerScore:
     def __init__(self,answer,score=0):
@@ -2591,6 +2668,7 @@ class AnswerScore:
         self.score = score
         self.scoreDetails = [] 
     def addScore(self,score:float,imgs1Name:str,imgs2Name:str,type:int,desc:str,step=0):
+        score = int(score*1000+0.5)
         self.score += score
         self.scoreDetails.append( AnswerScoreDetail(score,imgs1Name,imgs2Name,type,desc,step))
         #((score,imgs1Name,imgs2Name,type,desc,"" if step==0 else "(附加分)"))    
@@ -3425,6 +3503,36 @@ class Agent:
                   and verticesB-verticesA==len(imgsFrm2.img2Elements[0].getPolygonPoints())-len(imgsFrm2.img1Elements[0].getPolygonPoints())\
                   and len(imgsFrm1.img3Elements[0].getPolygonPoints()) - verticesB==len(imgsFrm2.img3Elements[0].getPolygonPoints())-len(imgsFrm2.img2Elements[0].getPolygonPoints()):
                 scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE3_VERTICES,"图形顶点数变化趋势一致")
+            # Challenge Problem D-11
+            if imgsFrm1.img1Elements[0].isOpenedImage() or imgsFrm1.img2Elements[0].isOpenedImage() or imgsFrm1.img3Elements[0].isOpenedImage():
+                idxVerticesCaseOpened = []
+                #imgABC = [imgsFrm1.img1Elements[0], imgsFrm1.img2Elements[0],imgsFrm1.img3Elements[0]]
+                imgGHI = [imgsFrm2.img1Elements[0], imgsFrm2.img2Elements[0],imgsFrm2.img3Elements[0]]
+                def __match(e1,e2): return e1.isOpenedImage()==e2.isOpenedImage() and len(e1.getPolygonPoints())==len(e2.getPolygonPoints())
+                for e1 in [imgsFrm1.img1Elements[0], imgsFrm1.img2Elements[0],imgsFrm1.img3Elements[0]]:
+                    i = indexOfMatched(e1,imgGHI,__match,idxVerticesCaseOpened )
+                    if i<0: break
+                    idxVerticesCaseOpened.append(i)
+                if len(idxVerticesCaseOpened)==3: 
+                    scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE3_VERTICES|1,"相同组合的图形顶点数(其中含非闭合图形)")
+
+            #
+            # Challenge C-04
+            #
+            crossPointsA = len(imgsFrm1.img1Elements[0].getCrossPoints())
+            #print("检测交叉点数  ... %s-%s : crossPointsA=%d " %(imgs1Name,imgs2Name,crossPointsA))
+            if crossPointsA>0:
+                crossPointsB = len(imgsFrm1.img2Elements[0].getCrossPoints())
+                #crossPointsC = len(imgsFrm1.img3Elements[0].getCrossPoints())        
+                #print("检测交叉点数  ... %s-%s : crossPointsB=%d,crossPointsC=%d " %(imgs1Name,imgs2Name,crossPointsB,crossPointsC))
+                if crossPointsB>crossPointsA and crossPointsB-crossPointsA==len(imgsFrm1.img3Elements[0].getCrossPoints()) -crossPointsB:
+                    crossPointsG = len(imgsFrm2.img1Elements[0].getCrossPoints())
+                    if crossPointsG>0 :
+                        crossPointsH = len(imgsFrm2.img2Elements[0].getCrossPoints())
+                        #crossPointsI = len(imgsFrm2.img3Elements[0].getCrossPoints())
+                        #print("检测交叉点数  ... %s-%s : crossPointsG=%d,crossPointsH=%d  crossPointsI=%d" %(imgs1Name,imgs2Name,crossPointsG,crossPointsH,crossPointsI))
+                        if crossPointsG>0 and crossPointsH-crossPointsG==len(imgsFrm2.img3Elements[0].getCrossPoints())-crossPointsH:
+                            scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE3_VERTICES|2,"交叉点数变化规律")
 
         #
         #  C -09:
@@ -3450,17 +3558,20 @@ class Agent:
         if caseXorCmp:
             xorImg1 = imgsFrm1.getXORImageElement()   
             xorImg2 = imgsFrm2.getXORImageElement()   
-            ratio,_,_ = countImageDiffRatio(xorImg1.image,xorImg2.image)
-            #print("------%s - %s : xorImgDiffRatio = %s" %(xorImg1.name,xorImg2.name,ratio))
+            ratio,diff1,_ = countImageDiffRatio(xorImg1.image,xorImg2.image)
+            #diff2 = xorImg1.countImageDiff(xorImg2)
+            #print("------%s - %s : xorImgDiffRatio = %s ; %d " %(xorImg1.name,xorImg2.name,ratio,diff1))
             if ratio<0.03:
-                scoreAddTo.addScore( 1*scoreWeight ,imgs1Name,imgs2Name,Agent.SCORETYPE3_XOR,"两组图形每组XOR后的图形相似") 
+                scoreAddTo.addScore( 1*scoreWeight ,imgs1Name,imgs2Name,Agent.SCORETYPE3_XOR,"两组图形每组XOR后的图形相似(%f)" %ratio) 
                 pass
                 #caseBitOPCmp = False  
                 #caseAddOrSubEq = False
             elif ratio<0.05: # E-08 : ABC-GH1 : 0.04
-                scoreAddTo.addScore( 0.3*scoreWeight ,imgs1Name,imgs2Name,Agent.SCORETYPE3_XOR,"两组图形每组XOR后的图形相似") 
+                scoreAddTo.addScore( 0.3*scoreWeight ,imgs1Name,imgs2Name,Agent.SCORETYPE3_XOR,"两组图形每组XOR后的图形相似(%f)" %ratio) 
                 #caseBitOPCmp = False 
                 #caseAddOrSubEq = False
+            #elif ratio<0.1: #   [Challenge Problem C-04 DEF-GH8 : 0.09 ; 但也影响到 Challenge E-12 的排除
+            #    scoreAddTo.addScore( 0*scoreWeight ,imgs1Name,imgs2Name,Agent.SCORETYPE3_XOR,"两组图形每组XOR后的图形相似(%f)" %ratio) 
             
             #if ratio<0.07:
             #    scoreAddTo.addScore( 3 if ratio<0.03 else ( 2 if ratio<0.05 else 1),imgs1Name,imgs2Name,"两组图形每组XOR后的图形相似") 
@@ -3635,11 +3746,12 @@ class Agent:
 
     def _printAnswerScoreDetails(answerScore:AnswerScore)->None:
         if len(answerScore.scoreDetails)==0:
-            print("答案 [%d] 总得分 = %.2f " % (answerScore.answer,answerScore.score))
+            print("答案 [%d] 总得分 = %.2f " % (answerScore.answer,answerScore.score/1000.0))
         else:
-            print("答案 [%d] 总得分 = %.2f , 其中 " % (answerScore.answer,answerScore.score))
+            print("答案 [%d] 总得分 = %.2f , 其中 " % (answerScore.answer,answerScore.score/1000.0))
             for d in answerScore.scoreDetails:
-                print("  得分 %.2f 来自于: [%s-%s]%06X:%s %s %s" % (d.score,d.imgs1Name,d.imgs2Name,d.type,d.desc,"" if d.step==0 else "(附加分)","" if (d.flags&1)==0 else "(被排除)"))
+                print("  得分 %.2f 来自于: [%s-%s]%06X:%s %s %s" % (d.score/1000.0,d.imgs1Name,d.imgs2Name,d.type,d.desc,"" if d.step==0 else "(附加分)","" if (d.flags&1)==0 else "(被排除)"))
+        #print("  = ","+".join(map(lambda d:str(d.score),answerScore.scoreDetails)))        
 
     def _printAnswersScoreDetails(answersScore:list)->None:                
         for answerScore in answersScore:
@@ -3687,7 +3799,7 @@ class Agent:
 
     def solve_3x3(self):
         # 去除一些 单独 的规则:
-        # (1) count(SCORETYPE3_XOR) >=5 : 排除 Challenge Problem E-12 的 XOR
+        # (1) count(SCORETYPE3_XOR) >=5 :   C-04
         # (2) count(SCORETYPE3_EQ1) >=3  : 排除 Challenge Problem E-12 的  (??? 误排除了 Challenge C-10 [ADG-CF3])
         #                                  排除 Challenge Problem E-05 的
         #

@@ -715,6 +715,7 @@ def main():
     #showSplitImages("Challenge E-11","H")
     #showSplitImages("Challenge C-07","C")
     #showSplitImages("Challenge C-08","A")
+    #showSplitImages("Challenge D-11","A")
     #testFlipImage("B-03","A") # ** 
     #testFlipImage("B-07","9") 
     #testFlipImage("B-05","A") 
@@ -892,7 +893,9 @@ def main():
     #test_getPolygonPoints("Challenge B-01","A")  # 三角形
     #test_getPolygonPoints("Challenge B-08","ABC456")  # 三角形 A:3,B:4,C:5,4:6,5:7,6:8
     #test_getPolygonPoints("B-02","A")  # 园 ??? 16
+    #test_getPolygonPoints("Challenge D-11","ABCDEFGH")
     #test_getPolygonPoints("Challenge E-05","GH56")
+    #test_getPolygonPoints("Challenge C-04","ABCGH8")
 
     #test_isImgSame2SwappedElements("C-09","AC") # True
     #test_isImgSame2SwappedElements("C-09","DF") # True
@@ -905,7 +908,7 @@ def main():
     #tmpTestImage()
     #test_newFlipedImage("B-01","1")
 
-    #testAgentSolve("B-05")
+    #testAgentSolve("B-01")
     #testAgentSolve("B-05")
     #testAgentSolve("B-06")
     #testAgentSolve("B-10")
@@ -967,6 +970,7 @@ def main():
 
     
     #**********testAgentSolve("Challenge E-04") # [ABC-GH5]第2和3图片左右合并==第1个图片
+    #testAgentSolve("Challenge E-12") #???
     #
     # 有问题
     #
@@ -975,20 +979,20 @@ def main():
 
     #************testAgentSolve("C-08") # 整体对称 答案 = 2,3 (!!!期望结果 =5);  test2:1
     #***********testAgentSolve("C-09") # 多结果  答案 = 2,3
-    #testAgentSolve("C-12") # ??? 结果 = 5 (!!!期望结果 =8) ;  test2:3
+    #testAgentSolve("C-12") # ?????未找到规则 (!!!期望结果 =8) ;  test2:3
 
 
     #testAgentSolve("E-12") # ?????  答案 = 1,2,8;  (!!!期望结果 =6) ; test2 ok
 
-    #*********testAgentSolve("Challenge C-04") # + 字=> # 字
+    #testAgentSolve("Challenge C-04") #  [ABC-GH8]00F002:交叉点数变化 两组图形每组XOR后的图形相似 + 字=> # 字
     #**************testAgentSolve("Challenge C-07") #多结果  [ABC-GH3]003100:两组图形元素个数变化按同倍数递增,且第一组与第二组对应项有相同元素
     #************testAgentSolve("Challenge C-08") # 整体对称, 同 C-8 结果 = 4 (!!!期望结果 =5) ; test2:7
 
-    #testAgentSolve("Challenge D-01") #?????未找到规则 答案 = 1,2,5,6
+    #testAgentSolve("Challenge D-01") #?????未找到规则 答案 = 1,2,5,6; _3 中判断
     #testAgentSolve("Challenge D-05") #?????未找到规则  答案 = 2,3
     #testAgentSolve("Challenge D-08") #  答案 = 1,2 ; 旋转 90 后外形相似
     #*************testAgentSolve("Challenge D-10") #  答案 = 5,7
-    #testAgentSolve("Challenge D-11") #?????未找到规则
+    #*************testAgentSolve("Challenge D-11") #[ABC-GH5]00F001:相同组合的图形顶点数(其中含非闭合图形)
 
     #*****testAgentSolve("Challenge E-05") # 顶点 规律 ;  4,6,8,10,12 个数的顶点
     #testAgentSolve("Challenge E-06") #?????未找到规则
@@ -997,7 +1001,7 @@ def main():
     #testAgentSolve("Challenge E-09") # ?????未找到规则
     #testAgentSolve("Challenge E-10")  # ?????未找到规则
     #*********testAgentSolve("Challenge E-11") #[ABC-GH3]两组图形元素个数变化递增量相同,且AB与GH增加了相同元素,BC与H3也增加了相同元素
-    #************testAgentSolve("Challenge E-12") #???
+    #testAgentSolve("Challenge E-12") #???
 
 
     #tempTest()
@@ -1015,7 +1019,7 @@ def main():
     #testSolveProblemSet("Basic Problems D") #   : ok
     #testSolveProblemSet("Basic Problems E") #      12
     #testSolveProblemSet("Challenge Problems C")  #  ok ;    
-    #testSolveProblemSet("Challenge Problems D")  #  1,11; ?? 5. 8,
+    #testSolveProblemSet("Challenge Problems D")  #  1; ?? 5. 8,
     testSolveProblemSet("Challenge Problems E")  # ::06,08,09,10
     return
 
