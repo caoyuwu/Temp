@@ -1502,6 +1502,7 @@ class ImageElement:
                 #points = []
                 for p in approx:
                     self._allVerticesPoints.append(p[0])
+        self._allVerticesPoints.sort(key=lambda e:(e[1],e[0]))            
         return self._allVerticesPoints
 
 
@@ -1515,16 +1516,17 @@ class ImageElement:
             pass
         self.__crossPoints = []
         allPoints = self.__getAllVerticesPoints()
-
+        #print("%s: %s" %(self.name,allPoints))
         n = len(allPoints)
         added = [False for _ in range(n)]
         for i in range(n):
             if added[i] : continue
-            #x,y = polygonPoints[i]
+            x,y = allPoints[i]
             pointsIdx = [i]
             for j in range(i+1,n):
                 if added[j] : continue
                 x2,y2 = allPoints[j]
+                if y2>=y+10: break
                 def __near(i2):
                     x,y = allPoints[i2]
                     return abs(x2-x)<10 and abs(y2-y)<10
@@ -3534,6 +3536,8 @@ class Agent:
                         if crossPointsG>0 and crossPointsH-crossPointsG==len(imgsFrm2.img3Elements[0].getCrossPoints())-crossPointsH:
                             scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,Agent.SCORETYPE3_VERTICES|2,"交叉点数变化规律")
 
+        # END caseVertices
+
         #
         #  C -09:
         #     
@@ -3622,6 +3626,7 @@ class Agent:
                 and distanceMatched(imgsFrm1.img3.getImageElements(),imgsFrm2.img3.getImageElements()):
                 scoreAddTo.addScore(1*scoreWeight,imgs1Name,imgs2Name,"两图片元素位置(距离)有相同规律") 
         """
+    #END calculateImages3MatchScore    
 
     def calculateImages3MatchScore_3(self,answerId:str,scoreAddTo:AnswerScore):
         imgA = self.getImage1("A")
@@ -3657,13 +3662,17 @@ class Agent:
                 print("[%s]检测对称...%d,%d,%d " % (answerId,len(imgE_RDElements),len(imgF_DElements),len(imgH_RElements)))
                 pass
             """    
+        #
+        # Challenge Problem D-01 : 特殊处理:
+        #     
+        #if len(imgA.getImageElements())==0  and conditionAnd("BCDEFGH"+answerId,lambda imgId:len(self.getImage1(imgId).getImageElements())==1):
 
-        # Challenge Problem C-08
         if len(imgA.getImageElements())==1 :
-            imgA0 = imgA.getImageElement(0)
             def __blackRatio(img):
                 h,w = img.shape
                 return (h*w-cv2.countNonZero(img)) / h*w
+            imgA0 = imgA.getImageElement(0)
+            # Challenge Problem C-08
             if imgA0.x0<15 and imgA0.y0<15 and imgA0.ex>imgA0.image.shape[1]-15 and imgA0.ey>imgA0.image.shape[0]-15 and imgA0.blackPixelCount/imgA0.getTotalPixel()>0.999 \
                 and __blackRatio(self.getImage1("B").image[imgA0.y0:imgA0.ey,imgA0.x0:int(cx)])>0.999 \
                 and __blackRatio(self.getImage1("D").image[imgA0.y0:int(cy),      imgA0.x0:imgA0.ex])>0.999 \
@@ -3677,13 +3686,39 @@ class Agent:
                     if len(imgI_Elements) / len(imgE_RDElements) > 3.5 and len(imgF_DElements) / len(imgE_RDElements) > 1.9 and len(imgH_RElements) / len(imgE_RDElements) > 1.9:
                         scoreAddTo.addScore( 5 ,"ABED",answerId+"HEC",0,"对称" )
                         #print("[%s]检测对称...%d,%d,%d %d " % (answerId,len(imgE_RDElements),len(imgF_DElements),len(imgH_RElements),len(imgI_Elements)))
-                pass      
+            # filledFlags 位表示的4个区域中的 :   1 2
+            #                 4 8 
+            def __test4RegionFilled(img:Image1,filledFlags)->bool:
+                if not len(img.getImageElements())==1: return False
+                e = img.getImageElement(0)
+                if e.x0>15 or e.y0>15 or e.ex<e.image.shape[1]-15 or e.ey<e.image.shape[0]-15:return False
+                cx ,cy =  int((e.ex+e.x0-0.5)/2),int((e.ey+e.y0-0.5)/2)
+                for i in range(4):
+                    x1,x2 =  (e.x0+5,cx-2) if (i&1)==0 else (cx+2,e.ex-5)
+                    y1,y2 =  (e.y0+5,cy-2) if (i&2)==0 else (cy+2,e.ey-5)
+                    imgRegion = e.image[y1:y2,x1:x2]
+                    n = cv2.countNonZero(imgRegion)  #n==0 为 
+                    blackExpected = (filledFlags&(1<<i))
+                    #print("%s : i=%d n=%d/%d" %(img.name,i,n,(y2-y1)*(x2-x1)))
+                    if n==0:
+                        if not blackExpected : return False
+                    elif n==(y2-y1)*(x2-x1):
+                        if blackExpected : return False
+                    else: return False
+                return True
+            if  __test4RegionFilled(self.getImage1(answerId),1|2|4) \
+                and __test4RegionFilled(imgA,0) and __test4RegionFilled(self.getImage1("B"),1) and __test4RegionFilled(self.getImage1("C"),1|2) \
+                and __test4RegionFilled(self.getImage1("D"),1) and __test4RegionFilled(self.getImage1("E"),1) and __test4RegionFilled(self.getImage1("F"),1|2) \
+                and __test4RegionFilled(self.getImage1("G"),1|4) and __test4RegionFilled(self.getImage1("H"),1|4)    :
+                #print("....answerId=",answerId)
+                scoreAddTo.addScore( 1 ,"CF","GH",0,"对称" )
+
         #
         # XOR 的例子: D-11
         # 
         #if caseXorEq:
         #    pass # todo                
-    # END method calculateImages3MatchScore 
+    # END method calculateImages3MatchScore_3 
 
     def calculateImages3MatchScore_2(self,imgs1Name:str,imgs2Name:str,scoreAddTo:AnswerScore,scoreWeight=1):
 
@@ -3802,10 +3837,12 @@ class Agent:
         # (1) count(SCORETYPE3_XOR) >=5 :   C-04
         # (2) count(SCORETYPE3_EQ1) >=3  : 排除 Challenge Problem E-12 的  (??? 误排除了 Challenge C-10 [ADG-CF3])
         #                                  排除 Challenge Problem E-05 的
+        # (3) count(SCORETYPE3_ECCHANGE)>=3 排除 Challenge Problem E-06 的 [BEH-CF1]
         #
         rulesChecks = [\
                 (0xff000|Agent.SCORETYPE3_EQ1_1,Agent.SCORETYPE3_EQ1,3 ),\
                 (0xff000,Agent.SCORETYPE3_XOR,5 ),\
+                (0xff000,Agent.SCORETYPE3_ECCHANGE,3 ),\
                 (0xff000,Agent.SCORETYPE2_VERTICES,4 )
                 ]  
         allAnswersScore = []

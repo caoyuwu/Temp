@@ -23,6 +23,7 @@ from RavensFigure import RavensFigure
 from RavensProblem import RavensProblem
 from RavensObject import RavensObject
 from ProblemSet import ProblemSet
+
 def getNextLine( r):
     line = r.readline().rstrip()
     while  line.strip().startswith("#"):
@@ -605,9 +606,10 @@ def test_getPolygonPoints(problemId:str,imgsId:str):
     for imgId in imgsId:
         e = agent.getImage1(imgId).getImageElement(0)
         points = e.getPolygonPoints()
+        crossPoints = e.getCrossPoints()
         #print("%s:%d : %s" % (imgId,len(points),points))
-        a.append((imgId,len(points),e.isRegularPolygon()))
-    print(",".join(map(lambda v:"%s:%d(%s)"%v,a)))    
+        a.append((imgId,len(points),e.isRegularPolygon(),len(crossPoints)))
+    print(",".join(map(lambda v:"%s:%d(%s)%d"%v,a)))    
 
 def test_isImgSame2SwappedElements(problemId:str,imgs2Id:str):
     agent = prepareAgent(problemId) 
@@ -999,7 +1001,7 @@ def main():
     #*********testAgentSolve("Challenge E-07") # 顶点 规律 , 4,6,8,10,12 个数的顶点
     #testAgentSolve("Challenge E-08") #?????未找到规则
     #testAgentSolve("Challenge E-09") # ?????未找到规则
-    #testAgentSolve("Challenge E-10")  # ?????未找到规则
+    #******testAgentSolve("Challenge E-10")  # ?????未找到规则 ; 答案 = 1,2 
     #*********testAgentSolve("Challenge E-11") #[ABC-GH3]两组图形元素个数变化递增量相同,且AB与GH增加了相同元素,BC与H3也增加了相同元素
     #testAgentSolve("Challenge E-12") #???
 
@@ -1019,8 +1021,8 @@ def main():
     #testSolveProblemSet("Basic Problems D") #   : ok
     #testSolveProblemSet("Basic Problems E") #      12
     #testSolveProblemSet("Challenge Problems C")  #  ok ;    
-    #testSolveProblemSet("Challenge Problems D")  #  1; ?? 5. 8,
-    testSolveProblemSet("Challenge Problems E")  # ::06,08,09,10
+    #testSolveProblemSet("Challenge Problems D")   # ok  ;   ??? 5. 8,
+    #testSolveProblemSet("Challenge Problems E")  # ::06,08,09; ??? 10
     return
 
     
