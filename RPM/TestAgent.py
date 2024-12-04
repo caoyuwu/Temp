@@ -650,8 +650,8 @@ def tmpTestImage()->None:
 #
 #  D-04
 #    
-def testAgentSolve(problemId):  
-    agent = Agent()
+
+def solveProblem(problemId,agent):      
     problem =  loadProblemByID(problemId)
     answer = agent.Solve(problem) 
     answerInfo = ""
@@ -659,20 +659,12 @@ def testAgentSolve(problemId):
         answerInfo = "(!!!期望结果 = %d)" % problem.correctAnswer
     print("[%s] 结果 = %d  %s" % ( problem.name, answer,answerInfo))
 
-def testAgentSolveChallenge(problemId):
-    agent = Agent()
-    problem =  loadChallengeProblemByID(problemId)
-    answer = agent.Solve(problem) 
-    answerInfo = ""
-    if answer!=problem.correctAnswer and problem.correctAnswer>0:
-        answerInfo = "(!!!期望结果 = %d)" % problem.correctAnswer
-    print("[%s] 结果 = %d  %s" % ( problem.name, answer,answerInfo))
 
-def testSolveProblemSet(setName:str):
+
+def solveProblemSet(setName:str,agent):    
     print("SolveProblemSet [%s]"%setName)
     startTime = time()
     problemSet = ProblemSet(setName)
-    agent = Agent()
     totalProblems = 0
     correctProblems = 0
     errProblems = []
@@ -692,6 +684,12 @@ def testSolveProblemSet(setName:str):
         #print("%s . %s : 结果 = %d %s\n" % (set.name, problem.name, answer,answerInfo))
     print("[%s] %d/%d , 耗时=%f %s" %(setName,correctProblems,totalProblems,(time()-startTime),"" if len(errProblems)==0 else "错误:"+",".join(errProblems)))
     
+def testAgentSolve(problemId):  
+    solveProblem(problemId, Agent())
+
+def testSolveProblemSet(setName:str):
+    solveProblemSet(setName, Agent())
+
 def main():
     Agent._DEBUG = True
     Agent._WARN = True
